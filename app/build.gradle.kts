@@ -7,9 +7,7 @@ plugins {
 
 android {
     namespace = "io.github.wjy.meditate"
-    compileSdk {
-        version = release(36)
-    }
+    compileSdk = 36 // 修正语法错误
 
     defaultConfig {
         applicationId = "io.github.wjy.meditate"
@@ -23,11 +21,16 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // 开启代码混淆和压缩，大幅减小 APK 体积
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        debug {
+            isMinifyEnabled = false
         }
     }
     compileOptions {
@@ -52,7 +55,6 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     testImplementation(libs.junit)
-    testImplementation(libs.junit.jupiter)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))
