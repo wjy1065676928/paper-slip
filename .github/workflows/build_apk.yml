@@ -1,0 +1,123 @@
+name: Auto build debug apk
+ 
+# 设置workflow的触发条件
+# 在pull和push到主分支时触发workflow
+# 在push tags时触发workflow
+on:
+  pull_request:
+    branches:
+      - 'master'
+  push:
+    branches:
+      - 'master'
+    # 在push tag时触发
+    tags:
+      - '*'
+ 
+# workflow的所有作业job
+jobs:
+  # 单个job的名字：测试Android项目
+  # 每个job执行完毕会默认删除所有文件等
+  #   可通过cache来保留特定文件夹和文件
+  #   也可使用upload-artifact上传来实现保留文件，再配合download-artifact实现多job之间的数据传递
+  test:
+    # test这个作业的实际名字
+    # 也是执行build时Actions监控处显示的名字
+    name: Run Unit Tests
+    # job的运行平台，还有windows、macos及不同版本可供选择
+    runs-on: ubuntu-22.04
+    # test任务的具体步骤，可以有很多个步骤，都写在这里
+    steps:
+      # 使用别人写好的指定版本的actions脚本，名称是checkout
+      # 这是步骤1，即每个'-'符号到下一个'-'符号之间的部分是一个步骤
+      - uses: actions/checkout@v2
+      # 这是步骤2，创建java环境，with里面填写actions的输入参数
+      - name: set up JDK 1.8
+        uses: actions/setup-java@v1
+        # 设置setup-java脚本的输入参数
+        with:
+          java-version: 1.8
+      # 步骤3，执行shell命令
+      - name: Unit tests
+        run: bash ./gradlew test --stacktrace
+ 
+  apk:
+    name: Generate APK
+    runs-on: ubuntu-22.04
+ 
+    steps:
+      - uses: actions/checkout@v2
+      - name: set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Build debug APK
+        run: bash ./gradlew assembleDebug --stacktrace
+      # 利用upload-artifact实现build结果的保存（可以在Actions的控制台下载压缩文件）
+      - name: Upload APK
+        uses: actions/upload-artifact@v2
+        with:
+          # 设置压缩文件的名称，在控制台会得到WhuHelper-debug.zip文件的下载链接
+          # 下载后解压缩，里面直接可以看到app-debug.apk，没有其他东西
+          name: WhuHelper-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+ 
+  deploy:
+    name: Upload Release Asset
+    # 依赖上一个job
+    needs: apk
+    runs-on: ubuntu-latest
+    # 只在tag时执行，即在自己终端运行以下代码后才会触发
+    # git tag -a v0.1.0 -m "release 0.1.0 version"
+    # git push origin –-tags
+    if: contains(github.ref, 'tags/')
+    steps:
+      # 自己编写的shell命令
+      # 学习如何设置单个任务的输出来被其他任务调用
+      - name: Prepare Release
+        # 设置id一般是为了其他step调用本步骤的输出
+        id: prepare_release
+        run: |
+          TAG_NAME=`echo $GITHUB_REF | cut -d / -f3`
+          echo ::set-output name=tag_name::$TAG_NAME
+       - name: Download build result for job apk
+        # 只有上一步获取到tag_name才继续，下载前面apk任务里面的WhuHelper-debug.zip文件
+        # 自动解压缩到当前文件夹，自动删除原压缩文件
+        # 多任务之间的数据交换
+        if: steps.prepare_release.outputs.tag_name
+        uses: actions/download-artifact@v2
+        with:
+          name: WhuHelper-debug
+      - shell: bash
+        # 手动更改apk名字
+        run: |
+          mv app-debug.apk  app-debug-${{steps.prepare_release.outputs.tag_name}}.apk 
+       # 发布release，版本号是用户git push的tag里面的版本号，发布的只有代码压缩包（与手动默认发布一致）
+      - name: Create Release
+        id: create_release
+        # 只有上一步获取到tag_name才继续
+        if: steps.prepare_release.outputs.tag_name
+        uses: actions/create-release@v1
+        env:
+          # GitHub 会自动创建 GITHUB_TOKEN 密码以在工作流程中使用
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 设置时区，默认是格林尼治时间
+          # TZ: Asia/Shanghai
+        with:
+          tag_name: ${{steps.prepare_release.outputs.tag_name}}
+          release_name: Release ${{steps.prepare_release.outputs.tag_name}} by zfb
+          draft: false
+          prerelease: false
+      # 这一步是对上一步发布的release文件的补充，调用github api上传一个apk文件
+      - name: Upload Release Asset
+        id: upload-release-asset 
+        # 只有create_release成功得到输出才继续
+        if: steps.create_release.outputs.upload_url
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }} 
+          asset_path: ./app-debug-${{steps.prepare_release.outputs.tag_name}}.apk
+          asset_name: app-debug-${{steps.prepare_release.outputs.tag_name}}.apk
+          asset_content_type: application/vnd.android.package-archive
