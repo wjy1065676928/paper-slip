@@ -1,12 +1,17 @@
 package io.github.wjy.meditate.network
 
-import io.ktor.client.*
-import io.ktor.client.engine.okhttp.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
-import io.ktor.http.*
-import java.io.File
 import android.util.Base64
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.okhttp.OkHttp
+import io.ktor.client.request.get
+import io.ktor.client.request.header
+import io.ktor.client.request.put
+import io.ktor.client.request.setBody
+import io.ktor.client.statement.HttpResponse
+import io.ktor.client.statement.bodyAsBytes
+import io.ktor.http.HttpHeaders
+import io.ktor.http.isSuccess
+import java.io.File
 
 class WebDavClient(
     private val url: String,
