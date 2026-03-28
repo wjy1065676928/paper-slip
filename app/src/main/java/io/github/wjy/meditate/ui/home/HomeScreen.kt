@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -41,6 +42,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Lightbulb
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CenterAlignedTopAppBar
@@ -55,8 +57,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.ripple
@@ -65,6 +70,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -74,12 +80,16 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.zIndex
@@ -88,6 +98,7 @@ import io.github.wjy.meditate.data.JournalEntry
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlinx.coroutines.delay
 
 /**
  * 【首页屏幕 (HomeScreen)】
@@ -111,6 +122,7 @@ fun HomeScreen(
     var isAdding by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf("全部") }
     var isDeleteMode by remember { mutableStateOf(false) }
+    var isShowingTrash by remember { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     
@@ -152,18 +164,37 @@ fun HomeScreen(
             },
             floatingActionButton = {
                 if (!isAdding) {
+                    var pressStartTime by remember { mutableLongStateOf(0L) }
+                    
                     FloatingActionButton(
-                        onClick = {
-                            isDeleteMode = false
-                            isAdding = true
-                        },
-                        /*
-                         * 【界面调整：右下角“+”按钮位置】
-                         * 修改 padding 的 bottom 和 end 数值：
-                         * bottom: 越大越靠上移。
-                         * end: 越大越靠左移。
-                         */
-                        modifier = Modifier.padding(bottom = 28.dp, end = 28.dp),
+                        onClick = { },
+                        modifier = Modifier
+                            .padding(bottom = 28.dp, end = 28.dp)
+                            .pointerInput(Unit) {
+                                awaitPointerEventScope {
+                                    while (true) {
+                                        val event = awaitPointerEvent()
+                                        when (event.type) {
+                                            PointerEventType.Press -> {
+                                                pressStartTime = System.currentTimeMillis()
+                                            }
+                                            PointerEventType.Release -> {
+                                                val duration = System.currentTimeMillis() - pressStartTime
+                                                if (duration >= 500) {
+                                                    // 长按：打开回收站
+                                                    isShowingTrash = true
+                                                } else {
+                                                    // 短按：打开添加面板
+                                                    isDeleteMode = false
+                                                    isAdding = true
+                                                }
+                                                event.changes.forEach { it.consume() }
+                                            }
+                                            else -> {}
+                                        }
+                                    }
+                                }
+                            },
                         containerColor = MaterialTheme.colorScheme.primaryContainer,
                         contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         shape = RoundedCornerShape(16.dp)
@@ -217,7 +248,7 @@ fun HomeScreen(
                             },
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.EndToStart) {
-                                    viewModel.deleteEntry(entry)
+                                    viewModel.softDeleteEntry(entry)
                                     true
                                 } else false
                             }
@@ -264,7 +295,41 @@ fun HomeScreen(
             }
         }
 
-        // 添加面板动画
+        // 【回收站面板动画】
+        val deletedEntries by viewModel.deletedEntries.collectAsState(initial = emptyList())
+        
+        AnimatedVisibility(
+            visible = isShowingTrash,
+            modifier = Modifier.zIndex(100f),
+            enter = fadeIn(tween(300)) + scaleIn(
+                animationSpec = tween(300, easing = FastOutSlowInEasing),
+                initialScale = 0.9f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            ),
+            exit = fadeOut(tween(300)) + scaleOut(
+                animationSpec = tween(300, easing = FastOutSlowInEasing),
+                targetScale = 0.9f,
+                transformOrigin = TransformOrigin(0.5f, 0.5f)
+            )
+        ) {
+            TrashScreen(
+                deletedEntries = deletedEntries,
+                onClose = { isShowingTrash = false },
+                onRestore = { entry ->
+                    viewModel.restoreEntry(entry)
+                    isShowingTrash = false
+                },
+                onPermanentlyDelete = { entry ->
+                    viewModel.permanentlyDeleteEntry(entry)
+                },
+                onEmptyTrash = {
+                    viewModel.emptyTrash()
+                    isShowingTrash = false
+                }
+            )
+        }
+        
+        // 【添加面板动画】
         AnimatedVisibility(
             visible = isAdding,
             enter = scaleIn(
@@ -367,16 +432,54 @@ fun AddEntryOverlay(
     var editingTag by remember { mutableStateOf<String?>(null) }
     var newTagText by remember { mutableStateOf("") }
     var tagDeleteMode by remember { mutableStateOf(false) }
+    var tags by remember { mutableStateOf(existingTags) }
     
     val focusRequester = remember { FocusRequester() }
     val focusManager = LocalFocusManager.current
+    val keyboardController = LocalSoftwareKeyboardController.current
+
+    // 当编辑标签时，自动请求焦点并打开输入法
+    LaunchedEffect(editingTag) {
+        if (editingTag != null) {
+            // 延迟一帧让 TextField 先完成布局
+            kotlinx.coroutines.delay(100)
+            try {
+                focusRequester.requestFocus()
+                keyboardController?.show()
+            } catch (e: Exception) {
+                // 忽略错误
+            }
+        }
+    }
 
     val syncNewTagAndClose = {
-        if (newTagText.isNotBlank()) {
-            selectedTag = newTagText
+        if (editingTag == "new" && newTagText.isNotBlank()) {
+            if (!tags.contains(newTagText)) {
+                tags = tags + newTagText
+                onTagSync(newTagText)
+            }
+        } else if (editingTag != null && editingTag != "new" && newTagText.isNotBlank()) {
+            val oldTag = editingTag
+            tags = tags.map { if (it == oldTag) newTagText else it }
             onTagSync(newTagText)
         }
         editingTag = null
+        newTagText = ""
+    }
+
+    val saveTagAndClearFocus = {
+        if (editingTag == "new" && newTagText.isNotBlank()) {
+            if (!tags.contains(newTagText)) {
+                tags = tags + newTagText
+                onTagSync(newTagText)
+            }
+        } else if (editingTag != null && editingTag != "new" && newTagText.isNotBlank()) {
+            val oldTag = editingTag
+            tags = tags.map { if (it == oldTag) newTagText else it }
+            onTagSync(newTagText)
+        }
+        editingTag = null
+        newTagText = ""
     }
 
     val handleFinalSave = {
@@ -419,34 +522,42 @@ fun AddEntryOverlay(
                 TextField(
                     value = content,
                     onValueChange = { content = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("此刻的心情...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused && editingTag != null) {
+                                saveTagAndClearFocus()
+                            }
+                        },
+                    placeholder = { Text("你有什么话要说", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { handleFinalSave() }),
                     colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent)
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("分类", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("Tag", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier.padding(vertical = 8.dp)
                 ) {
-                    items(existingTags) { tag ->
+                    items(tags) { tag ->
                         Box(contentAlignment = Alignment.TopEnd) {
                             if (editingTag == tag) {
-                                TextField(
+                                OutlinedTextField(
                                     value = newTagText,
                                     onValueChange = { newTagText = it },
                                     singleLine = true,
                                     modifier = Modifier
-                                        .width(100.dp)
+                                        .width(120.dp)
                                         .focusRequester(focusRequester),
                                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                                     keyboardActions = KeyboardActions(onDone = { 
                                         syncNewTagAndClose()
-                                    })
+                                    }),
+                                    textStyle = MaterialTheme.typography.bodyMedium,
+                                    shape = RoundedCornerShape(8.dp)
                                 )
                             } else {
                                 Box(
@@ -455,7 +566,9 @@ fun AddEntryOverlay(
                                         .clip(RoundedCornerShape(12.dp))
                                         .background(if (selectedTag == tag) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                                         .combinedClickable(
-                                            onClick = { selectedTag = tag },
+                                            onClick = { 
+                                                selectedTag = if (selectedTag == tag) "" else tag
+                                            },
                                             onLongClick = { tagDeleteMode = true }
                                         )
                                         .padding(horizontal = 12.dp, vertical = 6.dp)
@@ -469,7 +582,18 @@ fun AddEntryOverlay(
                                         modifier = Modifier
                                             .size(20.dp)
                                             .zIndex(2f)
-                                            .clickable { onDeleteTag(tag) }
+                                            .clickable { 
+                                                tags = tags - tag
+                                                if (editingTag == tag) {
+                                                    editingTag = null
+                                                    newTagText = ""
+                                                }
+                                                if (selectedTag == tag) {
+                                                    selectedTag = ""
+                                                }
+                                                onDeleteTag(tag)
+                                                tagDeleteMode = false
+                                            }
                                     ) {
                                         Icon(Icons.Default.Close, contentDescription = null, tint = Color.White, modifier = Modifier.padding(4.dp))
                                     }
@@ -478,7 +602,29 @@ fun AddEntryOverlay(
                         }
                     }
                     item {
-                        if (editingTag == null) {
+                        if (editingTag == "new") {
+                            OutlinedTextField(
+                                value = newTagText,
+                                onValueChange = { newTagText = it },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .width(120.dp)
+                                    .focusRequester(focusRequester),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardActions = KeyboardActions(
+                                    onDone = {
+                                        if (newTagText.isNotBlank()) {
+                                            tags = tags + newTagText
+                                            onTagSync(newTagText)
+                                            editingTag = null
+                                            newTagText = ""
+                                        }
+                                    }
+                                ),
+                                textStyle = MaterialTheme.typography.bodyMedium,
+                                shape = RoundedCornerShape(8.dp)
+                            )
+                        } else if (editingTag == null) {
                             IconButton(onClick = { 
                                 editingTag = "new"
                                 newTagText = ""
@@ -490,12 +636,18 @@ fun AddEntryOverlay(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                Text("建议 (可选)", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                Text("PS", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
                 TextField(
                     value = advice,
                     onValueChange = { advice = it },
-                    modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("给自己一点建议...") },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { focusState ->
+                            if (focusState.isFocused && editingTag != null) {
+                                saveTagAndClearFocus()
+                            }
+                        },
+                    placeholder = { Text("你还有什么话要说", color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)) },
                     colors = TextFieldDefaults.colors(focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent, focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent)
                 )
                 
@@ -574,6 +726,131 @@ fun JournalItem(entry: JournalEntry) {
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 【回收站界面】
+ */
+@Composable
+fun TrashScreen(
+    deletedEntries: List<JournalEntry>,
+    onClose: () -> Unit,
+    onRestore: (JournalEntry) -> Unit,
+    onPermanentlyDelete: (JournalEntry) -> Unit,
+    onEmptyTrash: () -> Unit
+) {
+    // 如果回收站为空，自动关闭
+    LaunchedEffect(deletedEntries.isEmpty()) {
+        if (deletedEntries.isEmpty()) {
+            onClose()
+        }
+    }
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { 
+                onClose() 
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Card(
+            modifier = Modifier
+                .padding(horizontal = 16.dp)
+                .fillMaxWidth(0.95f)
+                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
+            shape = RoundedCornerShape(28.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
+        ) {
+            Column(modifier = Modifier.padding(24.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.Start,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("回收站", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+                }
+                
+                Spacer(modifier = Modifier.height(12.dp))
+                
+                if (deletedEntries.isNotEmpty()) {
+                    LazyColumn(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(max = 400.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        items(deletedEntries, key = { it.id }) { entry ->
+                            TrashItem(
+                                entry = entry,
+                                onRestore = { onRestore(entry) },
+                                onDelete = { onPermanentlyDelete(entry) }
+                            )
+                        }
+                    }
+                    
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = onEmptyTrash,
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
+                    ) {
+                        Text("清空回收站")
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 【回收站中的日记项】
+ */
+@Composable
+fun TrashItem(
+    entry: JournalEntry,
+    onRestore: () -> Unit,
+    onDelete: () -> Unit
+) {
+    val dateFormat = remember { SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault()) }
+    
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Text(
+                text = entry.content.take(50) + if (entry.content.length > 50) "..." else "",
+                style = MaterialTheme.typography.bodySmall,
+                maxLines = 1
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = dateFormat.format(Date(entry.timestamp)),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(onClick = onRestore) {
+                        Text("恢复", fontSize = 12.sp)
+                    }
+                    TextButton(onClick = onDelete) {
+                        Text("删除", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }
