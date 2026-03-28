@@ -41,7 +41,11 @@ fun PaperTheme(
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
-    val colorScheme = when {
+    // MD3 规范红色
+    val md3Red = Color(0xFFB3261E)      // 浅色模式红色
+    val md3RedDark = Color(0xFFF2B8B5)  // 深色模式红色
+    
+    val baseColorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -49,6 +53,12 @@ fun PaperTheme(
         darkTheme -> darkColorScheme()
         else -> lightColorScheme()
     }
+    
+    // 应用 MD3 规范的红色
+    val colorScheme = baseColorScheme.copy(
+        error = if (darkTheme) md3RedDark else md3Red,
+        onError = Color.White
+    )
 
     val customColors = when (appStyle) {
         AppStyle.MD3 -> CustomColors(

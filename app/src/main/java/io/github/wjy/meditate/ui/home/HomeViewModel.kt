@@ -17,6 +17,10 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     val entries: StateFlow<List<JournalEntry>> = dao.getAllEntries()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // 回收站中的条目
+    val deletedEntries: StateFlow<List<JournalEntry>> = dao.getDeletedEntries()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     // 动态计算所有已存在的标签
     val tags: StateFlow<List<String>> = entries.map { list ->
         list.map { it.moodTag }.distinct().filter { it.isNotBlank() }
@@ -35,15 +39,37 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun deleteEntry(entry: JournalEntry) {
+    // 软删除（移入回收站）
+    fun softDeleteEntry(entry: JournalEntry) {
         viewModelScope.launch {
-            dao.deleteEntry(entry)
+            dao.softDeleteEntry(entry.id)
+        }
+    }
+
+    // 恢复条目
+    fun restoreEntry(entry: JournalEntry) {
+        viewModelScope.launch {
+            dao.restoreEntry(entry.id)
+        }
+    }
+
+    // 永久删除条目
+    fun permanentlyDeleteEntry(entry: JournalEntry) {
+        viewModelScope.launch {
+            dao.permanentlyDeleteEntry(entry.id)
         }
     }
 
     fun deleteEntriesByTag(tag: String) {
         viewModelScope.launch {
             dao.deleteEntriesByTag(tag)
+        }
+    }
+
+    // 清空回收站
+    fun emptyTrash() {
+        viewModelScope.launch {
+            dao.emptyTrash()
         }
     }
 }

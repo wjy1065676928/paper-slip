@@ -10,5 +10,6 @@ data class JournalEntry(
     val moodTag: String,
     val selfAdvice: String?,
     val timestamp: Long = System.currentTimeMillis(),
-    val isRational: Boolean = false // Whether it's a "self-rescue" advice
+    val isRational: Boolean = false,  // Whether it's a "self-rescue" advice
+    val isDeleted: Boolean = false    // Soft delete flag (moved to trash)
 )
