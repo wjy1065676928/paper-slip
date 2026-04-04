@@ -35,4 +35,7 @@ interface JournalDao {
 
     @Query("DELETE FROM journal_entries WHERE isDeleted = 1")
     suspend fun emptyTrash()
+
+    @Query("DELETE FROM journal_entries")
+    suspend fun clearAll()
 }

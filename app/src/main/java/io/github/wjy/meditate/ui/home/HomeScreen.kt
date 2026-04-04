@@ -15,7 +15,6 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -83,6 +82,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.platform.LocalFocusManager
@@ -241,11 +241,8 @@ fun HomeScreen(
                         key = { it.id },
                         contentType = { "journal_entry" }
                     ) { entry ->
-                        // 1. 使用 SwipeToDismissBox (Material3 API)
                         val dismissState = rememberSwipeToDismissBoxState(
-                            positionalThreshold = { distance ->
-                                distance * 0.6f   // 触发阈值
-                            },
+                            positionalThreshold = { distance -> distance * 0.6f },
                             confirmValueChange = { value ->
                                 if (value == SwipeToDismissBoxValue.EndToStart) {
                                     viewModel.softDeleteEntry(entry)
@@ -256,38 +253,41 @@ fun HomeScreen(
 
                         SwipeToDismissBox(
                             state = dismissState,
-                                // 【滑动进度计算：解决闪烁与即时变红问题】
-                                // 5. 滑动过程中背景透明度随滑动进度动态变化 (alpha 动画)
-                                backgroundContent = {
-                                    BoxWithConstraints {
-                                    val offset = dismissState.requireOffset()
-                                    val width = constraints.maxWidth.toFloat()
-                                    val progress = (kotlin.math.abs(offset) / width).coerceIn(0f, 1f)
-                                    val eased = FastOutSlowInEasing.transform(progress)
-                                    val scale = 0.8f + 0.4f * eased
-
-                                    Box(
-                                        modifier = Modifier
-                                            .fillMaxSize()
-                                            .clip(RoundedCornerShape(24.dp))
-                                            .background(MaterialTheme.colorScheme.error.copy(alpha = eased))
-                                            .padding(horizontal = 24.dp),
-                                        contentAlignment = Alignment.CenterEnd
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Delete,
-                                            contentDescription = "删除",
-                                            tint = MaterialTheme.colorScheme.onError.copy(alpha = eased),
-                                            modifier = Modifier.scale(scale)
-                                        )
-                                    }
+                            backgroundContent = {
+                                // 彻底修复：移除 BoxWithConstraints，改用 graphicsLayer 中的 size 获取尺寸
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .graphicsLayer {
+                                            // 1. 安全读取 Offset
+                                            val offset = try { dismissState.requireOffset() } catch (e: Exception) { 0f }
+                                            // 2. 根据宽度计算进度
+                                            val progress = if (size.width > 0f) (kotlin.math.abs(offset) / size.width).coerceIn(0f, 1f) else 0f
+                                            // 3. 应用渐变动画
+                                            alpha = FastOutSlowInEasing.transform(progress)
+                                        }
+                                        .background(MaterialTheme.colorScheme.error)
+                                        .padding(horizontal = 24.dp),
+                                    contentAlignment = Alignment.CenterEnd
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Delete,
+                                        contentDescription = "删除",
+                                        tint = MaterialTheme.colorScheme.onError,
+                                        modifier = Modifier.graphicsLayer {
+                                            val offset = try { dismissState.requireOffset() } catch (e: Exception) { 0f }
+                                            val progress = if (size.width > 0f) (kotlin.math.abs(offset) / size.width).coerceIn(0f, 1f) else 0f
+                                            val scale = 0.8f + 0.4f * FastOutSlowInEasing.transform(progress)
+                                            scaleX = scale
+                                            scaleY = scale
+                                        }
+                                    )
                                 }
                             },
-                            // 2. 支持从右向左滑动 (EndToStart)
                             enableDismissFromStartToEnd = false,
                             modifier = Modifier.animateItem()
                         ) {
-                            // 8. 前景内容使用 Card 包裹，符合 Material3 风格
                             JournalItem(entry = entry)
                         }
                     }
@@ -672,10 +672,6 @@ fun JournalItem(entry: JournalEntry) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        /*
-         * 【界面定制：卡片不透明度】
-         * alpha 数值越小越透明。
-         */
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -732,9 +728,6 @@ fun JournalItem(entry: JournalEntry) {
     }
 }
 
-/**
- * 【回收站界面】
- */
 @Composable
 fun TrashScreen(
     deletedEntries: List<JournalEntry>,
@@ -743,7 +736,6 @@ fun TrashScreen(
     onPermanentlyDelete: (JournalEntry) -> Unit,
     onEmptyTrash: () -> Unit
 ) {
-    // 如果回收站为空，自动关闭
     LaunchedEffect(deletedEntries.isEmpty()) {
         if (deletedEntries.isEmpty()) {
             onClose()
@@ -753,9 +745,7 @@ fun TrashScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { 
-                onClose() 
-            },
+            .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { onClose() },
         contentAlignment = Alignment.Center
     ) {
         Card(
@@ -807,9 +797,6 @@ fun TrashScreen(
     }
 }
 
-/**
- * 【回收站中的日记项】
- */
 @Composable
 fun TrashItem(
     entry: JournalEntry,
