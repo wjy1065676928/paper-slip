@@ -43,7 +43,7 @@ fun PaperTheme(
 ) {
     // MD3 规范红色
     val md3Red = Color(0xFFB3261E)      // 浅色模式红色
-    val md3RedDark = Color(0xFFF2B8B5)  // 深色模式红色
+    val md3RedDark = Color(0xFFB3261E)  // 深色模式红色
     
     val baseColorScheme = when {
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {

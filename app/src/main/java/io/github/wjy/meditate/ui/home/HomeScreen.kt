@@ -442,7 +442,7 @@ fun AddEntryOverlay(
     LaunchedEffect(editingTag) {
         if (editingTag != null) {
             // 延迟一帧让 TextField 先完成布局
-            kotlinx.coroutines.delay(100)
+            delay(100)
             try {
                 focusRequester.requestFocus()
                 keyboardController?.show()
