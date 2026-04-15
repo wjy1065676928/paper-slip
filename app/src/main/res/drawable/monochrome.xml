@@ -4,19 +4,10 @@
     android:viewportWidth="108"
     android:viewportHeight="108">
 
-    <!-- 主呼吸曲线 -->
     <path
         android:pathData="M36,58 C44,57 52,57 60,58 S68,59 72,58"
-        android:strokeColor="#FFFFFF"
+        android:strokeColor="#FFFFFFFF"
         android:strokeWidth="6"
-        android:strokeLineCap="round"
-        android:fillColor="@android:color/transparent"/>
-
-    <!-- 次级呼吸曲线（柔和） -->
-    <path
-        android:pathData="M36,64 C44,63.5 52,63.5 60,64 S68,64.5 72,64"
-        android:strokeColor="#CCFFFFFF"
-        android:strokeWidth="4"
         android:strokeLineCap="round"
         android:fillColor="@android:color/transparent"/>
 
