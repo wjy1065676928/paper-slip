@@ -8,7 +8,7 @@ plugins {
 
 android {
     namespace = "io.github.wjy.meditate"
-    compileSdk = 35
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "io.github.wjy.meditate"
@@ -17,7 +17,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // 🔥 只保留 arm64（体积直接砍一半）
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     val keystoreProperties = Properties().apply {
@@ -35,22 +38,47 @@ android {
 
     buildTypes {
         release {
+            // 🔥 混淆 + 压缩
             isMinifyEnabled = true
             isShrinkResources = true
+            isCrunchPngs = true
+            // 🔒 安全
             isDebuggable = false
+
+            // ⚡ 优化规则
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+
             signingConfig = signingConfigs.getByName("release")
+
+            // 🚀 禁用日志（配合 Proguard）
+            buildConfigField("boolean", "LOG_DEBUG", "false")
         }
     }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
     buildFeatures {
         compose = true
+        buildConfig = true
+    }
+
+    packaging {
+        resources {
+            // 🚀 去掉无用 license
+            excludes += setOf(
+                "META-INF/*.version",
+                "META-INF/*.properties",
+                "META-INF/*kotlin*",
+                "META-INF/*room*",
+                "META-INF/licenses/**"
+            )
+        }
     }
 }
 
@@ -63,6 +91,7 @@ dependencies {
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
+
     implementation(platform(libs.androidx.compose.bom))
     implementation(libs.androidx.ui)
     implementation(libs.androidx.ui.graphics)
@@ -72,15 +101,18 @@ dependencies {
     
     // 添加扩展图标库
     implementation("androidx.compose.material:material-icons-extended")
-    
+    //implementation("com.google.android.material:material:1.11.0")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
-    
+
     implementation(libs.androidx.datastore.preferences)
-    
+
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.okhttp)
+
+    // 🚀 Baseline Profile（性能提升）
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     debugImplementation(libs.androidx.ui.tooling)
 }

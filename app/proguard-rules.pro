@@ -1,5 +1,4 @@
 # Kotlin
--keep class kotlin.** { *; }
 -keep interface kotlin.** { *; }
 -dontwarn kotlin.**
 -keepclassmembers class **$WhenMappings {
@@ -12,10 +11,6 @@
     public static *** v(...);
     public static *** i(...);
 }
-
-# Optimize
--optimizationpasses 5
--dontusemixedcaseclassnames
 
 # Keep class names for reflection
 -keepclasseswithmembernames class * {
