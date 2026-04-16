@@ -58,6 +58,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -223,14 +224,7 @@ fun HomeScreen(
                     ) { entry ->
                         // 互斥优化：滚动时不开启左右滑动
                         val isScrolling = listState.isScrollInProgress
-                        val dismissState = rememberSwipeToDismissBoxState(
-                            confirmValueChange = { value ->
-                                if (value == SwipeToDismissBoxValue.EndToStart) {
-                                    viewModel.softDeleteEntry(entry)
-                                    true
-                                } else false
-                            }
-                        )
+                        val dismissState = rememberSwipeToDismissBoxState()
 
                         SwipeToDismissBox(
                             state = dismissState,
@@ -267,6 +261,17 @@ fun HomeScreen(
                             modifier = Modifier.animateItem()
                         ) {
                             JournalItem(entry = entry)
+                        }
+                        var hasDeleted by remember { mutableStateOf(false) }
+
+                        LaunchedEffect(dismissState.currentValue) {
+                            if (
+                                dismissState.currentValue == SwipeToDismissBoxValue.EndToStart &&
+                                !hasDeleted
+                            ) {
+                                hasDeleted = true
+                                viewModel.softDeleteEntry(entry)
+                            }
                         }
                     }
                 }

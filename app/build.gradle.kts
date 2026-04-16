@@ -13,7 +13,7 @@ android {
     defaultConfig {
         applicationId = "io.github.wjy.meditate"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 37
         versionCode = 1
         versionName = "1.0"
 
@@ -101,7 +101,6 @@ dependencies {
     
     // 添加扩展图标库
     implementation("androidx.compose.material:material-icons-extended")
-    //implementation("com.google.android.material:material:1.11.0")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
