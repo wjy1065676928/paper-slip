@@ -10,6 +10,11 @@ android {
     namespace = "io.github.wjy.meditate"
     compileSdk = 37
 
+    androidResources {
+        @Suppress("UnstableApiUsage")
+        localeFilters += listOf("zh", "zh-rCN")
+    }
+
     defaultConfig {
         applicationId = "io.github.wjy.meditate"
         minSdk = 24
@@ -17,10 +22,10 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // 🔥 只保留 arm64（体积直接砍一半）
-        //ndk {
-        //    abiFilters += listOf("arm64-v8a")
-        //}
+        // 🔥 极致体积优化：只保留 arm64
+        ndk {
+            abiFilters += listOf("arm64-v8a")
+        }
     }
 
     val keystoreProperties = Properties().apply {
@@ -70,13 +75,14 @@ android {
 
     packaging {
         resources {
-            // 🚀 去掉无用 license
+            // 🚀 极致资源剔除
             excludes += setOf(
                 "META-INF/*.version",
                 "META-INF/*.properties",
                 "META-INF/*kotlin*",
                 "META-INF/*room*",
-                "META-INF/licenses/**"
+                "META-INF/licenses/**",
+                "**/debug/*"
             )
         }
     }
