@@ -18,9 +18,9 @@ android {
         versionName = "1.0"
 
         // 🔥 只保留 arm64（体积直接砍一半）
-        ndk {
-            abiFilters += listOf("arm64-v8a")
-        }
+        //ndk {
+        //    abiFilters += listOf("arm64-v8a")
+        //}
     }
 
     val keystoreProperties = Properties().apply {
@@ -89,6 +89,7 @@ kotlin {
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
+    implementation(libs.androidx.lifecycle.runtime.compose)
     implementation(libs.androidx.lifecycle.viewmodel.compose)
     implementation(libs.androidx.activity.compose)
 
@@ -97,10 +98,9 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
+    implementation("androidx.compose.material:material-icons-core")
     implementation(libs.androidx.navigation.compose)
     
-    // 添加扩展图标库
-    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
