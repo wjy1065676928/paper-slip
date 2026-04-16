@@ -108,8 +108,21 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     
+    // 当没有记录时，隐藏"全部"分类
+    val categories = remember(entries, allTags) {
+        val base = if (entries.isEmpty()) allTags else listOf("全部") + allTags
+        base
+    }
+
     val filteredEntries = remember(entries, selectedFilter) {
         if (selectedFilter == "全部") entries else entries.filter { it.moodTag == selectedFilter }
+    }
+
+    // 如果当前选中的分类不在类别列表中，重置为第一个分类或"全部"
+    LaunchedEffect(categories) {
+        if (selectedFilter !in categories && entries.isNotEmpty()) {
+            selectedFilter = "全部"
+        }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -197,7 +210,7 @@ fun HomeScreen(
                     }
             ) {
                 CategoryRow(
-                    categories = listOf("全部") + allTags,
+                    categories = categories,
                     selectedCategory = selectedFilter,
                     isDeleteMode = isDeleteMode,
                     onCategorySelected = { 
@@ -224,7 +237,9 @@ fun HomeScreen(
                     ) { entry ->
                         // 互斥优化：滚动时不开启左右滑动
                         val isScrolling = listState.isScrollInProgress
-                        val dismissState = rememberSwipeToDismissBoxState()
+                        val dismissState = rememberSwipeToDismissBoxState(
+                            positionalThreshold = { it * 0.80f }
+                        )
 
                         SwipeToDismissBox(
                             state = dismissState,
@@ -383,7 +398,9 @@ fun AddEntryOverlay(
     var advice by remember { mutableStateOf("") }
     var selectedTag by remember { mutableStateOf("") }
     var tags by remember { mutableStateOf(existingTags) }
-    
+    var newTag by remember { mutableStateOf("") }
+    var isAddingNewTag by remember { mutableStateOf(false) }
+
     val focusManager = LocalFocusManager.current
 
     Box(
@@ -396,7 +413,22 @@ fun AddEntryOverlay(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
-                .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { focusManager.clearFocus() },
+                .clickable(
+                    interactionSource = remember { MutableInteractionSource() },
+                    indication = null
+                ) {
+                    // 点击卡片内部（标签行外）时处理
+                    if (isAddingNewTag) {
+                        if (newTag.isNotBlank() && newTag !in tags) {
+                            tags = tags + newTag
+                            onTagSync(newTag)
+                            selectedTag = newTag
+                        }
+                        newTag = ""
+                        isAddingNewTag = false
+                    }
+                    focusManager.clearFocus()
+                },
             shape = RoundedCornerShape(28.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh)
         ) {
@@ -413,7 +445,7 @@ fun AddEntryOverlay(
                 )
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                     items(tags) { tag ->
                         Box(
                             modifier = Modifier
@@ -425,8 +457,54 @@ fun AddEntryOverlay(
                             Text(tag)
                         }
                     }
+
+                    // 动态的按钮/输入框
+                    item {
+                        if (!isAddingNewTag) {
+                            // 显示"+"按钮
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = ripple()
+                                    ) {
+                                        isAddingNewTag = true
+                                    }
+                                    .padding(horizontal = 12.dp, vertical = 6.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text("+")
+                            }
+                        } else {
+                            // 显示输入框 - 大小和标签匹配
+                            Box(
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                    .padding(horizontal = 12.dp, vertical = 6.dp)
+                            ) {
+                                TextField(
+                                    value = newTag,
+                                    onValueChange = { newTag = it },
+                                    modifier = Modifier
+                                        .fillMaxWidth(),
+                                    placeholder = { Text("新标签") },
+                                    singleLine = true,
+                                    textStyle = MaterialTheme.typography.bodyMedium,
+                                    colors = TextFieldDefaults.colors(
+                                        focusedContainerColor = Color.Transparent,
+                                        unfocusedContainerColor = Color.Transparent,
+                                        focusedIndicatorColor = Color.Transparent,
+                                        unfocusedIndicatorColor = Color.Transparent
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(
                     onClick = { if (content.isNotBlank()) onSave(content, selectedTag.ifBlank { "未分类" }, advice.ifBlank { null }) },
