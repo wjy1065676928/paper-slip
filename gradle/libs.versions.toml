@@ -11,7 +11,7 @@ datastore = "1.2.1"
 zxing = "3.5.4"
 kotlinxSerialization = "1.11.0"
 playServicesCodeScanner = "16.1.0"
-ksp = "2.3.6"
+ksp = "2.3.7"
 navigationCompose = "2.9.8"
 
 [libraries]
