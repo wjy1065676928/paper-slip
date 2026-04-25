@@ -6,6 +6,8 @@ import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
 
 @Database(entities = [JournalEntry::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
@@ -23,16 +25,43 @@ abstract class AppDatabase : RoomDatabase() {
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
+                val settingsManager = SettingsManager(context)
+                val slot = runBlocking { settingsManager.activeSlot.first() }
+                val dbName = "paper_database_$slot"
+                
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "paper_database"
+                    dbName
                 )
                     .addMigrations(MIGRATION_1_2)
                     .build()
                 INSTANCE = instance
                 instance
             }
+        }
+
+        /**
+         * 预览一个特定的数据库文件（非活跃槽位）
+         */
+        fun getPreviewDatabase(context: Context, slot: String): AppDatabase {
+            return Room.databaseBuilder(
+                context.applicationContext,
+                AppDatabase::class.java,
+                "paper_database_$slot"
+            )
+                .addMigrations(MIGRATION_1_2)
+                .build()
+        }
+
+        fun closeDatabase() {
+            INSTANCE?.close()
+            INSTANCE = null
+        }
+
+        fun checkpoint(context: Context) {
+            val db = getDatabase(context)
+            db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
         }
     }
 }

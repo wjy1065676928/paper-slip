@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.wjy.meditate.data.AppDatabase
 import io.github.wjy.meditate.data.JournalEntry
+import io.github.wjy.meditate.data.SettingsManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -20,6 +21,9 @@ data class HomeUiState(
     val deletedEntries: List<JournalEntry> = emptyList(),
     val dbTags: List<String> = emptyList(),
     val sessionTags: Set<String> = emptySet(),
+    val blurEnabled: Boolean = false,
+    val blurImplementation: String = SettingsManager.IMPL_HARDWARE,
+    val blurIntensity: Float = 16f,
     val isLoading: Boolean = false
 )
 
@@ -29,31 +33,48 @@ data class HomeUiState(
 sealed interface HomeAction {
     data class AddEntry(val content: String, val moodTag: String, val advice: String?) : HomeAction
     data class SoftDeleteEntry(val entry: JournalEntry) : HomeAction
+    data class SoftDeleteEntries(val entries: List<JournalEntry>) : HomeAction
     data class RestoreEntry(val entry: JournalEntry) : HomeAction
     data class PermanentlyDeleteEntry(val entry: JournalEntry) : HomeAction
     data class DeleteEntriesByTag(val tag: String) : HomeAction
     data class AddSessionTag(val tag: String) : HomeAction
+    data class ImportEntries(val entries: List<JournalEntry>) : HomeAction
     data object EmptyTrash : HomeAction
 }
 
 class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).journalDao()
+    private val settingsManager = SettingsManager(application)
     
     private val _sessionTags = MutableStateFlow(setOf<String>())
 
     /**
      * 响应式状态流：使用 combine 实现多数据源的实时响应
      */
+    @Suppress("UNCHECKED_CAST")
     val uiState: StateFlow<HomeUiState> = combine(
         dao.getAllEntries(),
         dao.getDeletedEntries(),
-        _sessionTags
-    ) { entries, deletedEntries, sessionTags ->
+        _sessionTags,
+        settingsManager.blurEnabled,
+        settingsManager.blurImplementation,
+        settingsManager.blurIntensity
+    ) { args: Array<Any> ->
+        val entries = args[0] as List<JournalEntry>
+        val deletedEntries = args[1] as List<JournalEntry>
+        val sessionTags = args[2] as Set<String>
+        val blurEnabled = args[3] as Boolean
+        val blurImplementation = args[4] as String
+        val blurIntensity = args[5] as Float
+
         HomeUiState(
             entries = entries,
             deletedEntries = deletedEntries,
             dbTags = entries.map { it.moodTag }.distinct().filter { it.isNotBlank() },
             sessionTags = sessionTags,
+            blurEnabled = blurEnabled,
+            blurImplementation = blurImplementation,
+            blurIntensity = blurIntensity,
             isLoading = false
         )
     }.stateIn(
@@ -69,11 +90,21 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         when (action) {
             is HomeAction.AddEntry -> addEntry(action.content, action.moodTag, action.advice)
             is HomeAction.SoftDeleteEntry -> softDeleteEntry(action.entry)
+            is HomeAction.SoftDeleteEntries -> softDeleteEntries(action.entries)
             is HomeAction.RestoreEntry -> restoreEntry(action.entry)
             is HomeAction.PermanentlyDeleteEntry -> permanentlyDeleteEntry(action.entry)
             is HomeAction.DeleteEntriesByTag -> deleteEntriesByTag(action.tag)
             is HomeAction.AddSessionTag -> addSessionTag(action.tag)
+            is HomeAction.ImportEntries -> importEntries(action.entries)
             HomeAction.EmptyTrash -> emptyTrash()
+        }
+    }
+
+    private fun importEntries(entries: List<JournalEntry>) {
+        viewModelScope.launch {
+            entries.forEach { entry ->
+                dao.insertEntry(entry.copy(id = 0)) // 确保作为新记录插入
+            }
         }
     }
 
@@ -96,6 +127,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    private fun softDeleteEntries(entries: List<JournalEntry>) {
+        viewModelScope.launch {
+            entries.forEach { dao.softDeleteEntry(it.id) }
+        }
+    }
+
     private fun restoreEntry(entry: JournalEntry) {
         viewModelScope.launch {
             dao.restoreEntry(entry.id)
@@ -111,12 +148,12 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
     private fun deleteEntriesByTag(tag: String) {
         viewModelScope.launch {
             dao.deleteEntriesByTag(tag)
-            _sessionTags.value = _sessionTags.value - tag
+            _sessionTags.value -= tag
         }
     }
 
     private fun addSessionTag(tag: String) {
-        _sessionTags.value = _sessionTags.value + tag
+        _sessionTags.value += tag
     }
 
     private fun emptyTrash() {

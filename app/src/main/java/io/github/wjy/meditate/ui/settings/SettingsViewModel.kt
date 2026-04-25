@@ -5,11 +5,119 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.wjy.meditate.data.AppDatabase
 import io.github.wjy.meditate.data.JournalEntry
+import io.github.wjy.meditate.data.SettingsManager
+import io.github.wjy.meditate.data.WebDavConfig
+import io.github.wjy.meditate.network.RestorePreview
+import io.github.wjy.meditate.network.SyncManager
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import java.util.Random
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
     private val dao = AppDatabase.getDatabase(application).journalDao()
+    private val settingsManager = SettingsManager(application)
+    private val syncManager = SyncManager(application)
+
+    private val _syncStatus = MutableStateFlow<String?>(null)
+    val syncStatus = _syncStatus.asStateFlow()
+
+    private val _restorePreview = MutableStateFlow<RestorePreview?>(null)
+    val restorePreview = _restorePreview.asStateFlow()
+
+    val blurEnabled = settingsManager.blurEnabled
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = false)
+
+    val blurImplementation = settingsManager.blurImplementation
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = SettingsManager.IMPL_HARDWARE)
+
+    val blurIntensity = settingsManager.blurIntensity
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = 16f)
+
+    val webDavConfig = settingsManager.webDavConfig
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = WebDavConfig())
+
+    val activeSlot = settingsManager.activeSlot
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = "a")
+
+    fun setBlurEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            settingsManager.setBlurEnabled(enabled)
+        }
+    }
+
+    fun setBlurImplementation(implementation: String) {
+        viewModelScope.launch {
+            settingsManager.setBlurImplementation(implementation)
+        }
+    }
+
+    fun setBlurIntensity(intensity: Float) {
+        viewModelScope.launch {
+            settingsManager.setBlurIntensity(intensity)
+        }
+    }
+
+    fun updateWebDavConfig(config: WebDavConfig) {
+        viewModelScope.launch {
+            settingsManager.updateWebDavConfig(config)
+        }
+    }
+
+    fun testWebDavConnection(config: WebDavConfig) {
+        viewModelScope.launch {
+            _syncStatus.value = "正在测试连接..."
+            syncManager.testConnection(config)
+                .onSuccess { _syncStatus.value = "连接成功！" }
+                .onFailure { _syncStatus.value = "连接失败: ${it.message ?: "未知错误"}" }
+        }
+    }
+
+    fun syncNow() {
+        viewModelScope.launch {
+            _syncStatus.value = "正在同步..."
+            val config = settingsManager.webDavConfig.stateIn(viewModelScope).value
+            syncManager.syncToWebDav(config)
+                .onSuccess { _syncStatus.value = "同步成功" }
+                .onFailure { _syncStatus.value = "同步失败: ${it.message ?: "未知错误"}" }
+        }
+    }
+
+    fun downloadForRestore() {
+        viewModelScope.launch {
+            _syncStatus.value = "正在下载备份..."
+            val config = settingsManager.webDavConfig.stateIn(viewModelScope).value
+            syncManager.downloadAndPreview(config)
+                .onSuccess { 
+                    _restorePreview.value = it
+                    _syncStatus.value = null
+                }
+                .onFailure { _syncStatus.value = "下载失败: ${it.message ?: "未知错误"}" }
+        }
+    }
+
+    fun confirmRestore(onSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _syncStatus.value = "正在切换数据槽位..."
+            syncManager.switchActiveSlot()
+                .onSuccess {
+                    _restorePreview.value = null
+                    _syncStatus.value = "数据恢复成功"
+                    onSuccess()
+                }
+                .onFailure { _syncStatus.value = "切换失败: ${it.message ?: "未知错误"}" }
+        }
+    }
+
+    fun cancelRestore() {
+        _restorePreview.value = null
+    }
+
+    fun clearSyncStatus() {
+        _syncStatus.value = null
+    }
 
     fun generateDebugEntries(count: Int) {
         viewModelScope.launch {
@@ -29,7 +137,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     content = contents[random.nextInt(contents.size)] + " (Debug #${it + 1})",
                     moodTag = tags[random.nextInt(tags.size)],
                     timestamp = System.currentTimeMillis() - random.nextInt(1000 * 60 * 60 * 24 * 7),
-                    selfAdvice = if (random.nextBoolean()) "保持这个状态。" else null
+                    selfAdvice = if (random.nextBoolean()) "保持这个状态。" else null,
                 )
                 dao.insertEntry(entry)
             }
