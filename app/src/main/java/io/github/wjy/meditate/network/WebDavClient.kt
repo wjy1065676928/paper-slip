@@ -21,9 +21,9 @@ import javax.net.ssl.TrustManager
 import javax.net.ssl.X509TrustManager
 
 class WebDavClient(
-    private val url: String,
-    private val user: String,
-    private val pass: String,
+    url: String,
+    user: String,
+    pass: String,
     private val ignoreCert: Boolean = false
 ) {
     private val client = HttpClient(OkHttp) {

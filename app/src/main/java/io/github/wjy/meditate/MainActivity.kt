@@ -6,7 +6,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.navigation.compose.NavHost
@@ -23,7 +23,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         setContent {
             PaperTheme(appStyle = AppStyle.MIUI) {
-                var navigationKey by remember { mutableStateOf(0) }
+                var navigationKey by remember { mutableIntStateOf(0) }
                 AppNavigation(
                     key = navigationKey,
                     onDatabaseRestored = { navigationKey++ }

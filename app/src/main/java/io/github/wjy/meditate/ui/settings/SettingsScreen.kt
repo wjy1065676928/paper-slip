@@ -202,7 +202,7 @@ fun SettingsScreen(
                 ListItem(
                     headlineContent = { Text("WebDAV 同步") },
                     supportingContent = { 
-                        Text(if (webDavConfig.url.isBlank()) "未配置" else webDavConfig.url) 
+                        Text(webDavConfig.url.ifBlank { "未配置" })
                     },
                     modifier = Modifier.clickable { showWebDavDialog = true }
                 )
