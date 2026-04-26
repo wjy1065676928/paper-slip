@@ -25,6 +25,7 @@ android {
 
         // 🔥 极致体积优化：只保留 arm64
         ndk {
+            //noinspection ChromeOsAbiSupport
             abiFilters += listOf("arm64-v8a")
         }
     }
@@ -105,7 +106,7 @@ dependencies {
     implementation(libs.androidx.ui.graphics)
     implementation(libs.androidx.ui.tooling.preview)
     implementation(libs.androidx.material3)
-    implementation("androidx.compose.material:material-icons-core")
+    implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.navigation.compose)
     
     implementation(libs.androidx.room.runtime)
@@ -121,7 +122,7 @@ dependencies {
     implementation(libs.ktor.client.okhttp)
 
     // 🚀 Baseline Profile（性能提升）
-    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
+    implementation(libs.androidx.profileinstaller)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

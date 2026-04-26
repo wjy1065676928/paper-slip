@@ -362,7 +362,7 @@ fun WebDavConfigDialog(
                     value = url,
                     onValueChange = { url = it },
                     label = { Text("服务器地址") },
-                    placeholder = { Text("https://example.com/dav") },
+                    placeholder = { Text("http(s)://example.com:port/dav") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
@@ -376,7 +376,7 @@ fun WebDavConfigDialog(
                 TextField(
                     value = pass,
                     onValueChange = { pass = it },
-                    label = { Text("密码/应用令牌") },
+                    label = { Text("密码") },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth()
                 )
