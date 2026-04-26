@@ -115,8 +115,13 @@ dependencies {
     ksp(libs.androidx.room.compiler)
 
     implementation(libs.androidx.datastore.preferences)
-    implementation(libs.zxing.core)
+    implementation(libs.zxing.cpp)
+    implementation(libs.qrcode)
     implementation(libs.kotlinx.serialization.json)
+
+    implementation(libs.androidx.camera.camera2)
+    implementation(libs.androidx.camera.lifecycle)
+    implementation(libs.androidx.camera.view)
 
     implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)

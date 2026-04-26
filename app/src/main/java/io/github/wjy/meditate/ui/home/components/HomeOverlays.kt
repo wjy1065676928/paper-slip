@@ -1,12 +1,10 @@
 package io.github.wjy.meditate.ui.home.components
 
-import android.graphics.Bitmap
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -20,7 +18,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -36,7 +33,6 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -52,90 +48,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.TransformOrigin
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import io.github.wjy.meditate.data.JournalEntry
-
-@Composable
-fun ShareQrOverlay(
-    bitmap: Bitmap?,
-    onClose: () -> Unit
-) {
-    AnimatedVisibility(
-        visible = bitmap != null,
-        enter = fadeIn() + scaleIn(initialScale = 0.9f),
-        exit = fadeOut() + scaleOut(targetScale = 0.9f)
-    ) {
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .clickable { onClose() }
-                .zIndex(200f),
-            contentAlignment = Alignment.Center
-        ) {
-            Card(
-                modifier = Modifier
-                    .padding(32.dp)
-                    .fillMaxWidth()
-                    .clickable(enabled = false) { },
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        "面对面快传", 
-                        style = MaterialTheme.typography.titleLarge, 
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "让对方扫码接收选中的日记", 
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    bitmap?.let {
-                        Surface(
-                            modifier = Modifier
-                                .size(240.dp)
-                                .clip(RoundedCornerShape(16.dp)),
-                            color = Color.White,
-                            shape = RoundedCornerShape(16.dp)
-                        ) {
-                            Image(
-                                bitmap = it.asImageBitmap(),
-                                contentDescription = "二维码",
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(16.dp),
-                                contentScale = ContentScale.Fit
-                            )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(24.dp))
-                    Button(
-                        onClick = onClose,
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(16.dp)
-                    ) {
-                        Text("完成")
-                    }
-                }
-            }
-        }
-    }
-}
 
 @Composable
 fun AddEntryOverlay(

@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package io.github.wjy.meditate.ui.settings
 
 import android.content.ClipData
@@ -5,9 +7,16 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.renderscript.Allocation
+import android.renderscript.Element
+import android.renderscript.RenderScript
+import android.renderscript.ScriptIntrinsicBlur
 import android.widget.Toast
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -45,14 +54,22 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
+import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
+import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
 import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -74,14 +91,240 @@ fun SettingsScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     
+    var showImplDialog by remember { mutableStateOf(false) }
+    var showWebDavDialog by remember { mutableStateOf(false) }
+    var showScanOverlay by remember { mutableStateOf(false) }
+
+    // 模糊动画逻辑同步
+    val view = LocalView.current
+    var blurredBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    
+    LaunchedEffect(showScanOverlay, blurIntensity) {
+        if (showScanOverlay && blurEnabled && blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
+            val screenshot = view.drawToBitmap()
+            val rs = RenderScript.create(context)
+            val input = Allocation.createFromBitmap(rs, screenshot)
+            val output = Allocation.createTyped(rs, input.type)
+            val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
+            script.setRadius(blurIntensity.coerceIn(1f, 25f))
+            script.setInput(input)
+            script.forEach(output)
+            output.copyTo(screenshot)
+            blurredBitmap = screenshot.asImageBitmap()
+            rs.destroy()
+        } else if (!showScanOverlay) {
+            blurredBitmap = null
+        }
+    }
+
+    val blurRadius by animateFloatAsState(
+        targetValue = if (showScanOverlay && blurEnabled && 
+            (blurImplementation == SettingsManager.IMPL_HARDWARE || 
+             blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT)) blurIntensity else 0f,
+        label = "SettingsBlurAnimation"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.blur(blurRadius.dp),
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            topBar = {
+                TopAppBar(
+                    title = { Text("设置", fontWeight = FontWeight.Bold) },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                        }
+                    }
+                )
+            }
+        ) { padding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+            ) {
+                item {
+                    Text(
+                        "数据管理",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("WebDAV 同步") },
+                        supportingContent = { 
+                            Text(webDavConfig.url.ifBlank { "未配置" })
+                        },
+                        modifier = Modifier.clickable { showWebDavDialog = true }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("扫码快传 (扫码导入)") },
+                        supportingContent = { Text("扫描对方生成的日记二维码进行导入") },
+                        modifier = Modifier.clickable { showScanOverlay = true }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("全量快传 (系统分享)") },
+                        supportingContent = { Text("导出完整数据库文件发送给对方") },
+                        modifier = Modifier.clickable {
+                            scope.launch {
+                                try {
+                                    val slot = activeSlot
+                                    val dbFile = context.getDatabasePath("paper_database_$slot")
+                                    if (dbFile.exists()) {
+                                        val tempFile = java.io.File(context.cacheDir, "paper-slip-backup.db")
+                                        dbFile.copyTo(tempFile, overwrite = true)
+                                        
+                                        val contentUri: Uri = FileProvider.getUriForFile(
+                                            context,
+                                            "${context.packageName}.fileprovider",
+                                            tempFile
+                                        )
+                                        
+                                        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/octet-stream"
+                                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                        }
+                                        context.startActivity(Intent.createChooser(shareIntent, "发送数据库备份"))
+                                    } else {
+                                        Toast.makeText(context, "数据库文件不存在", Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    Toast.makeText(context, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        }
+                    )
+                }
+                
+                if (webDavConfig.url.isNotBlank()) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text("立即同步到云端") },
+                            supportingContent = { Text("上传本地数据库到 WebDAV") },
+                            modifier = Modifier.clickable { viewModel.syncNow() }
+                        )
+                    }
+                    item {
+                        ListItem(
+                            headlineContent = { Text("从云端恢复") },
+                            supportingContent = { Text("从 WebDAV 下载并预览备份") },
+                            modifier = Modifier.clickable { viewModel.downloadForRestore() }
+                        )
+                    }
+                }
+                
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+                item {
+                    Text(
+                        "模糊",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("模糊开关") },
+                        supportingContent = { Text("在弹窗出现时模糊背景") },
+                        trailingContent = {
+                            Switch(
+                                checked = blurEnabled,
+                                onCheckedChange = { viewModel.setBlurEnabled(it) }
+                            )
+                        }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("模糊实现") },
+                        supportingContent = { Text(blurImplementation) },
+                        modifier = Modifier.clickable { showImplDialog = true }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("模糊强度") },
+                        supportingContent = {
+                            Column {
+                                Slider(
+                                    value = blurIntensity,
+                                    onValueChange = { viewModel.setBlurIntensity(it) },
+                                    valueRange = 1f..25f,
+                                    steps = 24
+                                )
+                                Text("当前强度: ${blurIntensity.toInt()}", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                    )
+                }
+                
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+                
+                item {
+                    Text(
+                        "Debug 调试",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("生成测试数据") },
+                        supportingContent = { Text("点击生成 10 条随机日记记录") },
+                        modifier = Modifier.clickable {
+                            viewModel.generateDebugEntries(10)
+                        }
+                    )
+                }
+                item {
+                    ListItem(
+                        headlineContent = { Text("清空数据库") },
+                        supportingContent = { Text("永久删除所有记录，请谨慎操作") },
+                        modifier = Modifier.clickable {
+                            viewModel.clearAllEntries()
+                        }
+                    )
+                }
+            }
+        }
+
+        // RenderScript Legacy 模糊层
+        blurredBitmap?.let { bitmap ->
+            Image(
+                bitmap = bitmap,
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize().zIndex(85f),
+                contentScale = ContentScale.FillBounds
+            )
+        }
+
+        // 弹窗层
+        FastTransferOverlay(
+            visible = showScanOverlay,
+            qrBitmap = null,
+            canSwitchMode = false,
+            onClose = { showScanOverlay = false },
+            onImport = { viewModel.importEntries(it) }
+        )
+    }
+
+    // 反馈与对话框逻辑
     LaunchedEffect(syncStatus) {
         syncStatus?.let {
             if (it.contains("失败") || it.contains("错误")) {
-                // 将详细错误复制到剪贴板
                 val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 val clip = ClipData.newPlainText("WebDAV Error", it)
                 clipboard.setPrimaryClip(clip)
-                
                 Toast.makeText(context, "错误已复制到剪贴板，请粘贴查看", Toast.LENGTH_LONG).show()
             } else {
                 snackbarHostState.showSnackbar(it)
@@ -90,26 +333,17 @@ fun SettingsScreen(
         }
     }
 
-    var showImplDialog by remember { mutableStateOf(false) }
-    var showWebDavDialog by remember { mutableStateOf(false) }
-
     if (showWebDavDialog) {
         WebDavConfigDialog(
             config = webDavConfig,
             onDismiss = { showWebDavDialog = false },
-            onSave = { 
-                viewModel.updateWebDavConfig(it)
-                showWebDavDialog = false 
-            },
+            onSave = { viewModel.updateWebDavConfig(it); showWebDavDialog = false },
             onTest = { viewModel.testWebDavConnection(it) }
         )
     }
 
     if (showImplDialog) {
-        val options = listOf(
-            SettingsManager.IMPL_HARDWARE,
-            SettingsManager.IMPL_RENDER_SCRIPT
-        )
+        val options = listOf(SettingsManager.IMPL_HARDWARE, SettingsManager.IMPL_RENDER_SCRIPT)
         AlertDialog(
             onDismissRequest = { showImplDialog = false },
             title = { Text("选择模糊实现") },
@@ -118,13 +352,7 @@ fun SettingsScreen(
                     options.forEach { option ->
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { 
-                                    viewModel.setBlurImplementation(option)
-                                    showImplDialog = false
-                                }
-                                .padding(vertical = 8.dp)
+                            modifier = Modifier.fillMaxWidth().clickable { viewModel.setBlurImplementation(option); showImplDialog = false }.padding(vertical = 8.dp)
                         ) {
                             RadioButton(selected = (option == blurImplementation), onClick = null)
                             Spacer(modifier = Modifier.width(12.dp))
@@ -133,9 +361,7 @@ fun SettingsScreen(
                     }
                 }
             },
-            confirmButton = {
-                TextButton(onClick = { showImplDialog = false }) { Text("关闭") }
-            }
+            confirmButton = { TextButton(onClick = { showImplDialog = false }) { Text("关闭") } }
         )
     }
 
@@ -150,194 +376,12 @@ fun SettingsScreen(
                     Text("• 最近日期：${preview.lastEntryDate}")
                     Text("• 最近内容：${preview.lastEntryContent}...")
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "确认恢复将切换到新的数据槽位并重载应用。原数据依然保留在旧槽位，以防万一。",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.primary
-                    )
+                    Text("确认恢复将切换到新的数据槽位并重载应用。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
                 }
             },
-            confirmButton = {
-                TextButton(
-                    onClick = { viewModel.confirmRestore(onDatabaseRestored) }
-                ) {
-                    Text("确认恢复并重载")
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { viewModel.cancelRestore() }) {
-                    Text("取消")
-                }
-            }
+            confirmButton = { TextButton(onClick = { viewModel.confirmRestore(onDatabaseRestored) }) { Text("确认恢复并重载") } },
+            dismissButton = { TextButton(onClick = { viewModel.cancelRestore() }) { Text("取消") } }
         )
-    }
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-        topBar = {
-            TopAppBar(
-                title = { Text("设置", fontWeight = FontWeight.Bold) },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                }
-            )
-        }
-    ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding)
-        ) {
-            item {
-                Text(
-                    "通用设置",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("WebDAV 同步") },
-                    supportingContent = { 
-                        Text(webDavConfig.url.ifBlank { "未配置" })
-                    },
-                    modifier = Modifier.clickable { showWebDavDialog = true }
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("全量快传 (系统分享)") },
-                    supportingContent = { Text("导出完整数据库文件发送给对方") },
-                    modifier = Modifier.clickable {
-                        scope.launch {
-                            try {
-                                val slot = activeSlot
-                                val dbFile = context.getDatabasePath("paper_database_$slot")
-                                if (dbFile.exists()) {
-                                    // 复制到临时文件以分享
-                                    val tempFile = java.io.File(context.cacheDir, "paper-slip-backup.db")
-                                    dbFile.copyTo(tempFile, overwrite = true)
-                                    
-                                    val contentUri: Uri = FileProvider.getUriForFile(
-                                        context,
-                                        "${context.packageName}.fileprovider",
-                                        tempFile
-                                    )
-                                    
-                                    val shareIntent = Intent(Intent.ACTION_SEND).apply {
-                                        type = "application/octet-stream"
-                                        putExtra(Intent.EXTRA_STREAM, contentUri)
-                                        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                    }
-                                    context.startActivity(Intent.createChooser(shareIntent, "发送数据库备份"))
-                                } else {
-                                    Toast.makeText(context, "数据库文件不存在", Toast.LENGTH_SHORT).show()
-                                }
-                            } catch (e: Exception) {
-                                Toast.makeText(context, "分享失败: ${e.message}", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
-                )
-            }
-            
-            if (webDavConfig.url.isNotBlank()) {
-                item {
-                    ListItem(
-                        headlineContent = { Text("立即同步到云端") },
-                        supportingContent = { Text("上传本地数据库到 WebDAV") },
-                        modifier = Modifier.clickable { viewModel.syncNow() }
-                    )
-                }
-                item {
-                    ListItem(
-                        headlineContent = { Text("从云端恢复") },
-                        supportingContent = { Text("从 WebDAV 下载并预览备份") },
-                        modifier = Modifier.clickable { viewModel.downloadForRestore() }
-                    )
-                }
-            }
-            
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-
-            // 模糊设置
-            item {
-                Text(
-                    "模糊",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("模糊开关") },
-                    supportingContent = { Text("在弹窗出现时模糊背景") },
-                    trailingContent = {
-                        Switch(
-                            checked = blurEnabled,
-                            onCheckedChange = { viewModel.setBlurEnabled(it) }
-                        )
-                    }
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("模糊实现") },
-                    supportingContent = { Text(blurImplementation) },
-                    modifier = Modifier.clickable { showImplDialog = true }
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("模糊强度") },
-                    supportingContent = {
-                        Column {
-                            Slider(
-                                value = blurIntensity,
-                                onValueChange = { viewModel.setBlurIntensity(it) },
-                                valueRange = 1f..25f,
-                                steps = 24
-                            )
-                            Text("当前强度: ${blurIntensity.toInt()}", style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
-                )
-            }
-            
-            item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
-            
-            // Debug 种类
-            item {
-                Text(
-                    "Debug 调试",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("生成测试数据") },
-                    supportingContent = { Text("点击生成 10 条随机日记记录") },
-                    modifier = Modifier.clickable {
-                        viewModel.generateDebugEntries(10)
-                    }
-                )
-            }
-            item {
-                ListItem(
-                    headlineContent = { Text("清空数据库") },
-                    supportingContent = { Text("永久删除所有记录，请谨慎操作") },
-                    modifier = Modifier.clickable {
-                        viewModel.clearAllEntries()
-                    }
-                )
-            }
-        }
     }
 }
 

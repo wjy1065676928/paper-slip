@@ -149,4 +149,13 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             repository.getDao().clearAll()
         }
     }
+
+    fun importEntries(entries: List<JournalEntry>) {
+        viewModelScope.launch {
+            val dao = repository.getDao()
+            entries.forEach { entry ->
+                dao.insertEntry(entry.copy(id = 0))
+            }
+        }
+    }
 }

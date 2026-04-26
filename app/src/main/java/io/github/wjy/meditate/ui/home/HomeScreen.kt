@@ -74,9 +74,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.network.QrCodeUtils
 import io.github.wjy.meditate.ui.home.components.AddEntryOverlay
+import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
 import io.github.wjy.meditate.ui.home.components.HomeTopBar
 import io.github.wjy.meditate.ui.home.components.JournalEntryItem
-import io.github.wjy.meditate.ui.home.components.ShareQrOverlay
 import io.github.wjy.meditate.ui.home.components.TrashOverlay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
@@ -319,9 +319,12 @@ fun HomeScreen(
             )
         }
 
-        ShareQrOverlay(
-            bitmap = qrBitmap,
-            onClose = { qrBitmap = null }
+        FastTransferOverlay(
+            visible = qrBitmap != null,
+            qrBitmap = qrBitmap,
+            canSwitchMode = false, // 主界面仅用于展示码，不提供扫码切换
+            onClose = { qrBitmap = null },
+            onImport = { viewModel.onAction(HomeAction.ImportEntries(it)) }
         )
     }
 }

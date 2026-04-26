@@ -8,11 +8,13 @@ composeBom = "2026.04.01"
 room = "2.8.4"
 ktor = "3.4.3"
 datastore = "1.2.1"
-zxing = "3.5.4"
 kotlinxSerialization = "1.11.0"
 ksp = "2.3.7"
 navigationCompose = "2.9.8"
 profileInstaller = "1.4.1"
+zxingCpp = "3.0.2"
+cameraX = "1.6.0"
+qrcodeKotlin = "4.5.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -36,8 +38,12 @@ androidx-datastore-preferences = { group = "androidx.datastore", name = "datasto
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileInstaller" }
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
-zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
+zxing-cpp = { group = "io.github.zxing-cpp", name = "android", version.ref = "zxingCpp" }
+androidx-camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
+androidx-camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
+androidx-camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
+qrcode = { group = "io.github.g0dkar", name = "qrcode-kotlin-android", version.ref = "qrcodeKotlin" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
