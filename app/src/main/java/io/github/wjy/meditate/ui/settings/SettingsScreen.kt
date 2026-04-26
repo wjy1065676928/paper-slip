@@ -75,6 +75,7 @@ import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
 import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
 import kotlinx.coroutines.launch
+import kotlin.time.Duration.Companion.milliseconds
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -141,7 +142,7 @@ fun SettingsScreen(
             }
         } else if (!isOverlayVisible) {
             // 延迟清空，等待淡出动画结束
-            kotlinx.coroutines.delay(300)
+            kotlinx.coroutines.delay(300.milliseconds)
             blurredBitmap = null
         }
     }

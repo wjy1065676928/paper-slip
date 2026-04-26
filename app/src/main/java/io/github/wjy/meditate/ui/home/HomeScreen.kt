@@ -83,6 +83,7 @@ import io.github.wjy.meditate.ui.home.components.JournalEntryItem
 import io.github.wjy.meditate.ui.home.components.TrashOverlay
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
 data class ShareDto(
@@ -173,7 +174,7 @@ fun HomeScreen(
             rs.destroy()
         } else if (!isOverlayVisible) {
             // 延迟清空，匹配淡出动画
-            kotlinx.coroutines.delay(300)
+            kotlinx.coroutines.delay(300.milliseconds)
             blurredBitmap = null
         }
     }
