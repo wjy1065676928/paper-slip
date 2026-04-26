@@ -3,8 +3,8 @@ package io.github.wjy.meditate.ui.settings
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import io.github.wjy.meditate.data.AppDatabase
 import io.github.wjy.meditate.data.JournalEntry
+import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
 import io.github.wjy.meditate.network.RestorePreview
@@ -17,10 +17,8 @@ import kotlinx.coroutines.launch
 import java.util.Random
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val settingsManager = SettingsManager(application)
+    private val repository = JournalRepository.getInstance(application)
     private val syncManager = SyncManager(application)
-
-    private suspend fun getDao() = AppDatabase.getDatabase(getApplication()).journalDao()
 
     private val _syncStatus = MutableStateFlow<String?>(null)
     val syncStatus = _syncStatus.asStateFlow()
@@ -28,42 +26,42 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     private val _restorePreview = MutableStateFlow<RestorePreview?>(null)
     val restorePreview = _restorePreview.asStateFlow()
 
-    val blurEnabled = settingsManager.blurEnabled
+    val blurEnabled = repository.settingsManager.blurEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = false)
 
-    val blurImplementation = settingsManager.blurImplementation
+    val blurImplementation = repository.settingsManager.blurImplementation
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = SettingsManager.IMPL_HARDWARE)
 
-    val blurIntensity = settingsManager.blurIntensity
+    val blurIntensity = repository.settingsManager.blurIntensity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = 16f)
 
-    val webDavConfig = settingsManager.webDavConfig
+    val webDavConfig = repository.settingsManager.webDavConfig
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = WebDavConfig())
 
-    val activeSlot = settingsManager.activeSlot
+    val activeSlot = repository.settingsManager.activeSlot
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = "a")
 
     fun setBlurEnabled(enabled: Boolean) {
         viewModelScope.launch {
-            settingsManager.setBlurEnabled(enabled)
+            repository.settingsManager.setBlurEnabled(enabled)
         }
     }
 
     fun setBlurImplementation(implementation: String) {
         viewModelScope.launch {
-            settingsManager.setBlurImplementation(implementation)
+            repository.settingsManager.setBlurImplementation(implementation)
         }
     }
 
     fun setBlurIntensity(intensity: Float) {
         viewModelScope.launch {
-            settingsManager.setBlurIntensity(intensity)
+            repository.settingsManager.setBlurIntensity(intensity)
         }
     }
 
     fun updateWebDavConfig(config: WebDavConfig) {
         viewModelScope.launch {
-            settingsManager.updateWebDavConfig(config)
+            repository.settingsManager.updateWebDavConfig(config)
         }
     }
 
@@ -79,7 +77,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun syncNow() {
         viewModelScope.launch {
             _syncStatus.value = "正在同步..."
-            val config = settingsManager.webDavConfig.stateIn(viewModelScope).value
+            val config = repository.settingsManager.webDavConfig.stateIn(viewModelScope).value
             syncManager.syncToWebDav(config)
                 .onSuccess { _syncStatus.value = "同步成功" }
                 .onFailure { _syncStatus.value = "同步失败: ${it.message ?: "未知错误"}" }
@@ -89,7 +87,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun downloadForRestore() {
         viewModelScope.launch {
             _syncStatus.value = "正在下载备份..."
-            val config = settingsManager.webDavConfig.stateIn(viewModelScope).value
+            val config = repository.settingsManager.webDavConfig.stateIn(viewModelScope).value
             syncManager.downloadAndPreview(config)
                 .onSuccess { 
                     _restorePreview.value = it
@@ -133,6 +131,7 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
             )
             
             val random = Random()
+            val dao = repository.getDao()
             repeat(count) {
                 val entry = JournalEntry(
                     content = contents[random.nextInt(contents.size)] + " (Debug #${it + 1})",
@@ -140,14 +139,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     timestamp = System.currentTimeMillis() - random.nextInt(1000 * 60 * 60 * 24 * 7),
                     selfAdvice = if (random.nextBoolean()) "保持这个状态。" else null,
                 )
-                getDao().insertEntry(entry)
+                dao.insertEntry(entry)
             }
         }
     }
 
     fun clearAllEntries() {
         viewModelScope.launch {
-            getDao().clearAll()
+            repository.getDao().clearAll()
         }
     }
 }

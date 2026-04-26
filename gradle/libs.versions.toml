@@ -10,7 +10,6 @@ ktor = "3.4.3"
 datastore = "1.2.1"
 zxing = "3.5.4"
 kotlinxSerialization = "1.11.0"
-playServicesCodeScanner = "16.1.0"
 ksp = "2.3.7"
 navigationCompose = "2.9.8"
 profileInstaller = "1.4.1"
@@ -36,10 +35,9 @@ androidx-room-compiler = { group = "androidx.room", name = "room-compiler", vers
 androidx-datastore-preferences = { group = "androidx.datastore", name = "datastore-preferences", version.ref = "datastore" }
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileInstaller" }
 ktor-client-core = { group = "io.ktor", name = "ktor-client-core", version.ref = "ktor" }
-ktor-client-okhttp = { group = "io.ktor", name = "ktor-client-okhttp", version.ref = "ktor" }
+ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 zxing-core = { group = "com.google.zxing", name = "core", version.ref = "zxing" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerialization" }
-play-services-code-scanner = { group = "com.google.android.gms", name = "play-services-code-scanner", version.ref = "playServicesCodeScanner" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

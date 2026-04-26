@@ -117,10 +117,9 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     implementation(libs.zxing.core)
     implementation(libs.kotlinx.serialization.json)
-    implementation(libs.play.services.code.scanner)
 
     implementation(libs.ktor.client.core)
-    implementation(libs.ktor.client.okhttp)
+    implementation(libs.ktor.client.android)
 
     // 🚀 Baseline Profile（性能提升）
     implementation(libs.androidx.profileinstaller)
