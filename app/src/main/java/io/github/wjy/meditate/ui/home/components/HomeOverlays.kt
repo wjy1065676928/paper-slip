@@ -179,6 +179,7 @@ private fun AddEntryContent(
             modifier = Modifier
                 .padding(horizontal = 16.dp)
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
                 .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) {
                     if (isAddingNewTag) {
                         if (newTag.isNotBlank() && newTag !in tags) {
@@ -301,7 +302,11 @@ fun TrashOverlay(
             contentAlignment = Alignment.Center
         ) {
             Card(
-                modifier = Modifier.padding(16.dp).fillMaxWidth().clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
+                modifier = Modifier
+                    .padding(16.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(28.dp))
+                    .clickable(interactionSource = remember { MutableInteractionSource() }, indication = null) { },
                 shape = RoundedCornerShape(28.dp)
             ) {
                 Column(modifier = Modifier.padding(24.dp)) {

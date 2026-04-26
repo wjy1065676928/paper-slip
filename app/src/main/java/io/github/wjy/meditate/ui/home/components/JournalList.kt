@@ -141,9 +141,11 @@ fun JournalItem(
     onToggleSelection: () -> Unit = {}
 ) {
     val dateFormat = remember { SimpleDateFormat("MM月dd日 HH:mm", Locale.getDefault()) }
+    val shape = RoundedCornerShape(24.dp)
     Card(
         modifier = Modifier
             .fillMaxWidth()
+            .clip(shape)
             .combinedClickable(
                 onClick = { 
                     if (isSelectionMode) onToggleSelection()
@@ -152,7 +154,7 @@ fun JournalItem(
                     if (!isSelectionMode) onToggleSelection()
                 }
             ),
-        shape = RoundedCornerShape(24.dp),
+        shape = shape,
         colors = CardDefaults.cardColors(
             containerColor = if (isSelected) 
                 MaterialTheme.colorScheme.primaryContainer 

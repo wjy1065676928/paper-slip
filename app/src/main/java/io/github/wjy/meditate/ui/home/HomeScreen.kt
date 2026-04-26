@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package io.github.wjy.meditate.ui.home
 
 import android.graphics.Bitmap
@@ -360,6 +362,7 @@ private fun HomeActionButtons(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
+                    .clip(RoundedCornerShape(16.dp))
                     .combinedClickable(
                         onClick = onAddClick,
                         onLongClick = onAddLongClick
