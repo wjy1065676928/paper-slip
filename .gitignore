@@ -2,6 +2,9 @@
 .gradle/
 build/
 
+# kotlin
+.kotlin/
+
 # Local config
 local.properties
 
@@ -22,3 +25,7 @@ Thumbs.db
 
 # 编译输出
 app/release/
+app/debug/
+
+# log
+*.log

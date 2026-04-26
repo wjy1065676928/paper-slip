@@ -120,7 +120,7 @@ private fun AddEntryContent(
                     value = content,
                     onValueChange = { content = it },
                     modifier = Modifier.fillMaxWidth(),
-                    placeholder = { Text("你有什么话要说") },
+                    placeholder = { Text("Talk Talk") },
                     colors = TextFieldDefaults.colors(
                         focusedContainerColor = Color.Transparent, 
                         unfocusedContainerColor = Color.Transparent, 

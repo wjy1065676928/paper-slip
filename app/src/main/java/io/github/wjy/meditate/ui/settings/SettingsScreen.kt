@@ -71,6 +71,7 @@ import androidx.core.content.FileProvider
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.wjy.meditate.data.AppDatabase
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
 import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
@@ -234,6 +235,9 @@ fun SettingsScreen(
                         modifier = Modifier.clickable {
                             scope.launch {
                                 try {
+                                    // 导出前执行 checkpoint，确保所有 WAL 数据同步到主 .db 文件
+                                    AppDatabase.checkpoint(context)
+
                                     val slot = activeSlot
                                     val dbFile = context.getDatabasePath("paper_database_$slot")
                                     if (dbFile.exists()) {

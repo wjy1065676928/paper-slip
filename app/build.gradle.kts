@@ -123,7 +123,6 @@ dependencies {
     implementation(libs.androidx.camera.lifecycle)
     implementation(libs.androidx.camera.view)
 
-    implementation(libs.ktor.client.core)
     implementation(libs.ktor.client.android)
 
     // 🚀 Baseline Profile（性能提升）

@@ -1,6 +1,7 @@
 package io.github.wjy.meditate.network
 
 import android.content.Context
+import android.net.Uri
 import io.github.wjy.meditate.data.AppDatabase
 import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.data.SettingsManager
@@ -95,6 +96,43 @@ class SyncManager(private val context: Context) {
             kotlinx.coroutines.delay(200.milliseconds)
 
             Result.success(Unit)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
+     * 从本地文件 (Uri) 导入数据库并进入 A/B 预览流程
+     */
+    suspend fun importFromFile(uri: Uri): Result<RestorePreview> = withContext(Dispatchers.IO) {
+        try {
+            val currentSlot = settingsManager.activeSlot.first()
+            val inactiveSlot = if (currentSlot == "a") "b" else "a"
+            val targetDbFile = context.getDatabasePath("paper_database_$inactiveSlot")
+
+            context.contentResolver.openInputStream(uri)?.use { input ->
+                targetDbFile.outputStream().use { output ->
+                    input.copyTo(output)
+                }
+            } ?: return@withContext Result.failure(Exception("无法读取文件"))
+
+            // 清除旧的 WAL 文件防止干扰
+            File(targetDbFile.path + "-wal").delete()
+            File(targetDbFile.path + "-shm").delete()
+
+            val previewDb = AppDatabase.getPreviewDatabase(context, inactiveSlot)
+            val entries = previewDb.journalDao().getAllEntries().first()
+            val count = entries.size
+            val lastEntry = entries.firstOrNull()
+            
+            val dateFormat = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+            val preview = RestorePreview(
+                entryCount = count,
+                lastEntryContent = lastEntry?.content?.take(30) ?: "无内容",
+                lastEntryDate = lastEntry?.let { dateFormat.format(Date(it.timestamp)) } ?: "N/A"
+            )
+            previewDb.close()
+            Result.success(preview)
         } catch (e: Exception) {
             Result.failure(e)
         }
