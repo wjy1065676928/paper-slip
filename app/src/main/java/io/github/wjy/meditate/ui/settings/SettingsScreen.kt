@@ -11,8 +11,11 @@ import android.renderscript.Allocation
 import android.renderscript.Element
 import android.renderscript.RenderScript
 import android.renderscript.ScriptIntrinsicBlur
+import android.util.Log
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -57,6 +60,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
@@ -95,32 +99,58 @@ fun SettingsScreen(
     var showWebDavDialog by remember { mutableStateOf(false) }
     var showScanOverlay by remember { mutableStateOf(false) }
 
+    // 统一遮罩可见性判断
+    val isOverlayVisible = showScanOverlay || showWebDavDialog || showImplDialog || (restorePreview != null)
+
+    // 处理物理返回键
+    BackHandler(enabled = isOverlayVisible) {
+        when {
+            showScanOverlay -> showScanOverlay = false
+            showWebDavDialog -> showWebDavDialog = false
+            showImplDialog -> showImplDialog = false
+            restorePreview != null -> viewModel.cancelRestore()
+        }
+    }
+
     // 模糊动画逻辑同步
     val view = LocalView.current
     var blurredBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isOverlayVisible && blurredBitmap != null) 1f else 0f,
+        animationSpec = tween(300),
+        label = "SettingsBlurAlpha"
+    )
     
-    LaunchedEffect(showScanOverlay, blurIntensity) {
-        if (showScanOverlay && blurEnabled && blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
-            val screenshot = view.drawToBitmap()
-            val rs = RenderScript.create(context)
-            val input = Allocation.createFromBitmap(rs, screenshot)
-            val output = Allocation.createTyped(rs, input.type)
-            val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-            script.setRadius(blurIntensity.coerceIn(1f, 25f))
-            script.setInput(input)
-            script.forEach(output)
-            output.copyTo(screenshot)
-            blurredBitmap = screenshot.asImageBitmap()
-            rs.destroy()
-        } else if (!showScanOverlay) {
+    LaunchedEffect(isOverlayVisible, blurIntensity) {
+        if (isOverlayVisible && blurEnabled && blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
+            try {
+                // 确保在截图前 UI 状态已更新，但动画尚未完全覆盖
+                val screenshot = view.drawToBitmap()
+                val rs = RenderScript.create(context)
+                val input = Allocation.createFromBitmap(rs, screenshot)
+                val output = Allocation.createTyped(rs, input.type)
+                val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
+                script.setRadius(blurIntensity.coerceIn(1f, 25f))
+                script.setInput(input)
+                script.forEach(output)
+                output.copyTo(screenshot)
+                blurredBitmap = screenshot.asImageBitmap()
+                rs.destroy()
+            } catch (e: Exception) {
+                Log.e("SettingsBlur", "Blur failed", e)
+            }
+        } else if (!isOverlayVisible) {
+            // 延迟清空，等待淡出动画结束
+            kotlinx.coroutines.delay(300)
             blurredBitmap = null
         }
     }
 
     val blurRadius by animateFloatAsState(
-        targetValue = if (showScanOverlay && blurEnabled && 
+        targetValue = if (isOverlayVisible && blurEnabled &&
             (blurImplementation == SettingsManager.IMPL_HARDWARE || 
              blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT)) blurIntensity else 0f,
+        animationSpec = tween(300),
         label = "SettingsBlurAnimation"
     )
 
@@ -161,17 +191,45 @@ fun SettingsScreen(
                         modifier = Modifier.clickable { showWebDavDialog = true }
                     )
                 }
+                
+                if (webDavConfig.url.isNotBlank()) {
+                    item {
+                        ListItem(
+                            headlineContent = { Text("立即同步到云端") },
+                            supportingContent = { Text("上传本地数据库到 WebDAV") },
+                            modifier = Modifier.clickable { viewModel.syncNow() }
+                        )
+                    }
+                    item {
+                        ListItem(
+                            headlineContent = { Text("从云端恢复") },
+                            supportingContent = { Text("从 WebDAV 下载并预览备份") },
+                            modifier = Modifier.clickable { viewModel.downloadForRestore() }
+                        )
+                    }
+                }
+                
+                item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
+
+                item {
+                    Text(
+                        "分享",
+                        style = MaterialTheme.typography.titleSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)
+                    )
+                }
                 item {
                     ListItem(
-                        headlineContent = { Text("扫码快传 (扫码导入)") },
-                        supportingContent = { Text("扫描对方生成的日记二维码进行导入") },
+                        headlineContent = { Text("扫码") },
+                        supportingContent = { Text("扫描对方二维码预览记录") },
                         modifier = Modifier.clickable { showScanOverlay = true }
                     )
                 }
                 item {
                     ListItem(
-                        headlineContent = { Text("全量快传 (系统分享)") },
-                        supportingContent = { Text("导出完整数据库文件发送给对方") },
+                        headlineContent = { Text("全部分享") },
+                        supportingContent = { Text("向对方展示所有") },
                         modifier = Modifier.clickable {
                             scope.launch {
                                 try {
@@ -202,23 +260,6 @@ fun SettingsScreen(
                             }
                         }
                     )
-                }
-                
-                if (webDavConfig.url.isNotBlank()) {
-                    item {
-                        ListItem(
-                            headlineContent = { Text("立即同步到云端") },
-                            supportingContent = { Text("上传本地数据库到 WebDAV") },
-                            modifier = Modifier.clickable { viewModel.syncNow() }
-                        )
-                    }
-                    item {
-                        ListItem(
-                            headlineContent = { Text("从云端恢复") },
-                            supportingContent = { Text("从 WebDAV 下载并预览备份") },
-                            modifier = Modifier.clickable { viewModel.downloadForRestore() }
-                        )
-                    }
                 }
                 
                 item { HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp)) }
@@ -299,23 +340,30 @@ fun SettingsScreen(
         }
 
         // RenderScript Legacy 模糊层
-        blurredBitmap?.let { bitmap ->
-            Image(
-                bitmap = bitmap,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().zIndex(85f),
-                contentScale = ContentScale.FillBounds
-            )
+        if (blurAlpha > 0f) {
+            blurredBitmap?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = blurAlpha }
+                        .zIndex(85f),
+                    contentScale = ContentScale.FillBounds
+                )
+            }
         }
 
         // 弹窗层
-        FastTransferOverlay(
-            visible = showScanOverlay,
-            qrBitmap = null,
-            canSwitchMode = false,
-            onClose = { showScanOverlay = false },
-            onImport = { viewModel.importEntries(it) }
-        )
+        Box(modifier = Modifier.zIndex(120f)) {
+            FastTransferOverlay(
+                visible = showScanOverlay,
+                qrBitmap = null,
+                canSwitchMode = false,
+                onClose = { showScanOverlay = false },
+                onImport = { viewModel.importEntries(it) }
+            )
+        }
     }
 
     // 反馈与对话框逻辑

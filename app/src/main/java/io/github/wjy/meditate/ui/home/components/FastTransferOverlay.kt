@@ -30,8 +30,11 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -77,6 +80,9 @@ fun FastTransferOverlay(
     var cachedQrBitmap by remember { mutableStateOf<Bitmap?>(null) }
     var isScanning by remember { mutableStateOf(false) }
     
+    // 扫码结果预览状态
+    var scannedEntries by remember { mutableStateOf<List<JournalEntry>?>(null) }
+    
     LaunchedEffect(visible, qrBitmap) {
         if (visible) {
             // 只有在弹窗显示期间才更新缓存
@@ -86,6 +92,7 @@ fun FastTransferOverlay(
             } else {
                 isScanning = true
             }
+            scannedEntries = null // 每次打开时重置预览
         }
     }
 
@@ -139,85 +146,124 @@ fun FastTransferOverlay(
                     modifier = Modifier.padding(24.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
+                    val title = when {
+                        scannedEntries != null -> "导入预览"
+                        isScanning -> "扫码预览"
+                        else -> "面对面快传"
+                    }
+                    
                     Text(
-                        if (isScanning) "扫码导入" else "面对面快传",
+                        title,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.onSurface
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        if (isScanning) "对准另一台设备的二维码" else "让对方扫码接收选中的日记",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(24.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .size(240.dp)
-                            .clip(RoundedCornerShape(16.dp))
-                            .background(if (isScanning && hasCameraPermission) Color.Black else Color.White),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (isScanning && hasCameraPermission) {
-                            QrScannerView(onResult = { result ->
-                                try {
-                                    val dtoList = Json.decodeFromString<List<ShareDto>>(result)
-                                    val entries = dtoList.map { dto ->
-                                        JournalEntry(
-                                            content = dto.c,
-                                            moodTag = dto.t,
-                                            timestamp = dto.d,
-                                            selfAdvice = dto.a
+                    
+                    if (scannedEntries != null) {
+                        val entries = scannedEntries!!
+                        // 扫描结果预览列表
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text("识别到 ${entries.size} 条记录：", style = MaterialTheme.typography.bodyMedium)
+                            Spacer(modifier = Modifier.height(16.dp))
+                            LazyColumn(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .heightIn(max = 200.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(entries) { entry ->
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                                    ) {
+                                        Text(
+                                            text = entry.content.take(50),
+                                            modifier = Modifier.padding(12.dp),
+                                            style = MaterialTheme.typography.bodySmall,
+                                            maxLines = 2
                                         )
                                     }
-                                    onImport(entries)
-                                    onClose()
-                                    Toast.makeText(context, "成功导入 ${entries.size} 条记录", Toast.LENGTH_SHORT).show()
-                                } catch (e: Exception) {
-                                    Log.e("FastTransfer", "Parse failed", e)
                                 }
-                            })
-                        } else if (isScanning) {
-                             Text("正在请求相机权限...", color = Color.Gray)
-                        } else {
-                            // 使用缓存的图片，防止动画期间内容闪失
-                            cachedQrBitmap?.let {
-                                Image(
-                                    bitmap = it.asImageBitmap(),
-                                    contentDescription = "二维码",
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .padding(16.dp),
-                                    contentScale = ContentScale.Fit
-                                )
-                            } ?: Text("未生成二维码", color = Color.Gray)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(24.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (canSwitchMode && cachedQrBitmap != null) {
-                            TextButton(
-                                onClick = { isScanning = !isScanning },
-                                modifier = Modifier.weight(1f),
+                            }
+                            Spacer(modifier = Modifier.height(24.dp))
+                            Button(
+                                onClick = {
+                                    scannedEntries?.let { onImport(it) }
+                                    onClose()
+                                },
+                                modifier = Modifier.fillMaxWidth(),
                                 shape = RoundedCornerShape(16.dp)
                             ) {
-                                Text(if (isScanning) "显示我的码" else "扫码接收")
+                                Text("留下")
                             }
                         }
-                        
-                        Button(
-                            onClick = onClose,
-                            modifier = Modifier.weight(if (canSwitchMode && cachedQrBitmap != null) 1f else 2f),
-                            shape = RoundedCornerShape(16.dp)
+                    } else {
+                        // 扫码或展示码界面
+                        Text(
+                            if (isScanning) "对准另一台设备的二维码" else "让对方扫码接收选中的日记",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(24.dp))
+
+                        Box(
+                            modifier = Modifier
+                                .size(240.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isScanning && hasCameraPermission) Color.Black else Color.White),
+                            contentAlignment = Alignment.Center
                         ) {
-                            Text("关闭")
+                            if (isScanning && hasCameraPermission) {
+                                QrScannerView(onResult = { result ->
+                                    try {
+                                        val dtoList = Json.decodeFromString<List<ShareDto>>(result)
+                                        scannedEntries = dtoList.map { dto ->
+                                            JournalEntry(
+                                                content = dto.c,
+                                                moodTag = dto.t,
+                                                timestamp = dto.d,
+                                                selfAdvice = dto.a
+                                            )
+                                        }
+                                        // 扫描成功，不再扫描，转为显示预览
+                                        isScanning = false 
+                                    } catch (e: Exception) {
+                                        Log.e("FastTransfer", "Parse failed", e)
+                                    }
+                                })
+                            } else if (isScanning) {
+                                 Text("正在请求相机权限...", color = Color.Gray)
+                            } else {
+                                // 使用缓存的图片，防止动画期间内容闪失
+                                cachedQrBitmap?.let {
+                                    Image(
+                                        bitmap = it.asImageBitmap(),
+                                        contentDescription = "二维码",
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .padding(16.dp),
+                                        contentScale = ContentScale.Fit
+                                    )
+                                } ?: Text("未生成二维码", color = Color.Gray)
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(24.dp))
+                        
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (canSwitchMode && cachedQrBitmap != null) {
+                                TextButton(
+                                    onClick = { isScanning = !isScanning },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(16.dp)
+                                ) {
+                                    Text(if (isScanning) "显示我的码" else "扫码接收")
+                                }
+                            }
                         }
                     }
                 }

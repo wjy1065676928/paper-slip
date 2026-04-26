@@ -8,8 +8,10 @@ import android.renderscript.Element
 import android.renderscript.RenderScript
 import android.renderscript.ScriptIntrinsicBlur
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
@@ -61,6 +63,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
@@ -113,6 +116,19 @@ fun HomeScreen(
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
 
+    // 核心修复：处理物理返回键。
+    // 如果处于选择模式、删除模式或有任何弹窗开启，拦截返回键并执行取消/关闭操作。
+    val isAnyOverlayActive = isSelectionMode || isAdding || isShowingTrash || qrBitmap != null || isDeleteMode
+    BackHandler(enabled = isAnyOverlayActive) {
+        when {
+            qrBitmap != null -> qrBitmap = null
+            isShowingTrash -> isShowingTrash = false
+            isAdding -> isAdding = false
+            isSelectionMode -> selectedIds = emptySet()
+            isDeleteMode -> isDeleteMode = false
+        }
+    }
+
     val categories by remember(uiState.dbTags, uiState.sessionTags, uiState.entries.isEmpty()) {
         derivedStateOf {
             val tags = (uiState.dbTags + uiState.sessionTags).distinct().filter { it.isNotBlank() }
@@ -136,7 +152,12 @@ fun HomeScreen(
     val view = LocalView.current
     
     var blurredBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    
+    val blurAlpha by animateFloatAsState(
+        targetValue = if (isOverlayVisible && blurredBitmap != null) 1f else 0f,
+        animationSpec = tween(300),
+        label = "HomeBlurAlpha"
+    )
+
     LaunchedEffect(isOverlayVisible, uiState.blurIntensity) {
         if (isOverlayVisible && uiState.blurEnabled && uiState.blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
             val screenshot = view.drawToBitmap()
@@ -151,6 +172,8 @@ fun HomeScreen(
             blurredBitmap = screenshot.asImageBitmap()
             rs.destroy()
         } else if (!isOverlayVisible) {
+            // 延迟清空，匹配淡出动画
+            kotlinx.coroutines.delay(300)
             blurredBitmap = null
         }
     }
@@ -159,6 +182,7 @@ fun HomeScreen(
         targetValue = if (isOverlayVisible && uiState.blurEnabled && 
             (uiState.blurImplementation == SettingsManager.IMPL_HARDWARE || 
              uiState.blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT)) uiState.blurIntensity else 0f,
+        animationSpec = tween(300),
         label = "BlurAnimation"
     )
 
@@ -284,13 +308,19 @@ fun HomeScreen(
             }
         }
 
-        blurredBitmap?.let { bitmap ->
-            Image(
-                bitmap = bitmap,
-                contentDescription = null,
-                modifier = Modifier.fillMaxSize().zIndex(85f),
-                contentScale = ContentScale.FillBounds
-            )
+        // RenderScript Legacy 模糊层
+        if (blurAlpha > 0f) {
+            blurredBitmap?.let { bitmap ->
+                Image(
+                    bitmap = bitmap,
+                    contentDescription = null,
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .graphicsLayer { alpha = blurAlpha }
+                        .zIndex(85f),
+                    contentScale = ContentScale.FillBounds
+                )
+            }
         }
 
         Box(modifier = Modifier.zIndex(100f)) {
@@ -319,13 +349,15 @@ fun HomeScreen(
             )
         }
 
-        FastTransferOverlay(
-            visible = qrBitmap != null,
-            qrBitmap = qrBitmap,
-            canSwitchMode = false, // 主界面仅用于展示码，不提供扫码切换
-            onClose = { qrBitmap = null },
-            onImport = { viewModel.onAction(HomeAction.ImportEntries(it)) }
-        )
+        Box(modifier = Modifier.zIndex(120f)) {
+            FastTransferOverlay(
+                visible = qrBitmap != null,
+                qrBitmap = qrBitmap,
+                canSwitchMode = false, // 主界面仅用于展示码，不提供扫码切换
+                onClose = { qrBitmap = null },
+                onImport = { viewModel.onAction(HomeAction.ImportEntries(it)) }
+            )
+        }
     }
 }
 
