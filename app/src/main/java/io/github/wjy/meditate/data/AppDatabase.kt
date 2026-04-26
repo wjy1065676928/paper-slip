@@ -7,7 +7,8 @@ import androidx.room.RoomDatabase
 import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 @Database(entities = [JournalEntry::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
@@ -16,6 +17,7 @@ abstract class AppDatabase : RoomDatabase() {
     companion object {
         @Volatile
         private var INSTANCE: AppDatabase? = null
+        private val mutex = Mutex()
 
         private val MIGRATION_1_2 = object : Migration(1, 2) {
             override fun migrate(db: SupportSQLiteDatabase) {
@@ -23,21 +25,23 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        fun getDatabase(context: Context): AppDatabase {
-            return INSTANCE ?: synchronized(this) {
-                val settingsManager = SettingsManager(context)
-                val slot = runBlocking { settingsManager.activeSlot.first() }
-                val dbName = "paper_database_$slot"
-                
-                val instance = Room.databaseBuilder(
-                    context.applicationContext,
-                    AppDatabase::class.java,
-                    dbName
-                )
-                    .addMigrations(MIGRATION_1_2)
-                    .build()
-                INSTANCE = instance
-                instance
+        suspend fun getDatabase(context: Context): AppDatabase {
+            return INSTANCE ?: mutex.withLock {
+                INSTANCE ?: run {
+                    val settingsManager = SettingsManager(context)
+                    val slot = settingsManager.activeSlot.first()
+                    val dbName = "paper_database_$slot"
+                    
+                    val instance = Room.databaseBuilder(
+                        context.applicationContext,
+                        AppDatabase::class.java,
+                        dbName
+                    )
+                        .addMigrations(MIGRATION_1_2)
+                        .build()
+                    INSTANCE = instance
+                    instance
+                }
             }
         }
 
@@ -59,7 +63,7 @@ abstract class AppDatabase : RoomDatabase() {
             INSTANCE = null
         }
 
-        fun checkpoint(context: Context) {
+        suspend fun checkpoint(context: Context) {
             val db = getDatabase(context)
             db.openHelper.writableDatabase.query("PRAGMA wal_checkpoint(FULL)").close()
         }

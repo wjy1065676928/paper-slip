@@ -17,9 +17,10 @@ import kotlinx.coroutines.launch
 import java.util.Random
 
 class SettingsViewModel(application: Application) : AndroidViewModel(application) {
-    private val dao = AppDatabase.getDatabase(application).journalDao()
     private val settingsManager = SettingsManager(application)
     private val syncManager = SyncManager(application)
+
+    private suspend fun getDao() = AppDatabase.getDatabase(getApplication()).journalDao()
 
     private val _syncStatus = MutableStateFlow<String?>(null)
     val syncStatus = _syncStatus.asStateFlow()
@@ -139,14 +140,14 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
                     timestamp = System.currentTimeMillis() - random.nextInt(1000 * 60 * 60 * 24 * 7),
                     selfAdvice = if (random.nextBoolean()) "保持这个状态。" else null,
                 )
-                dao.insertEntry(entry)
+                getDao().insertEntry(entry)
             }
         }
     }
 
     fun clearAllEntries() {
         viewModelScope.launch {
-            dao.clearAll()
+            getDao().clearAll()
         }
     }
 }
