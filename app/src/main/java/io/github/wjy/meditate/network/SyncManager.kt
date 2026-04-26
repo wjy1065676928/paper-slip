@@ -12,6 +12,7 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.time.Duration.Companion.milliseconds
 
 data class RestorePreview(
     val entryCount: Int,
@@ -91,7 +92,7 @@ class SyncManager(private val context: Context) {
             JournalRepository.getInstance(context).refresh()
             
             // 3. 增加微小延迟，确保 DataStore 的 Flow 发射了新值，且旧连接已完全释放
-            kotlinx.coroutines.delay(200)
+            kotlinx.coroutines.delay(200.milliseconds)
 
             Result.success(Unit)
         } catch (e: Exception) {
