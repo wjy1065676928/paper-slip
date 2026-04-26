@@ -313,7 +313,7 @@ fun TrashOverlay(
                     Text("回收站", style = MaterialTheme.typography.headlineSmall)
                     Spacer(modifier = Modifier.height(16.dp))
                     LazyColumn(modifier = Modifier.heightIn(max = 300.dp)) {
-                        items(entries) { entry ->
+                        items(entries, key = { it.id }) { entry ->
                             Row(
                                 modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), 
                                 horizontalArrangement = Arrangement.SpaceBetween,

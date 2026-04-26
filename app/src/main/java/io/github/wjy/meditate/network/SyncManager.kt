@@ -2,6 +2,7 @@ package io.github.wjy.meditate.network
 
 import android.content.Context
 import io.github.wjy.meditate.data.AppDatabase
+import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
 import kotlinx.coroutines.Dispatchers
@@ -82,8 +83,16 @@ class SyncManager(private val context: Context) {
 
     suspend fun switchActiveSlot(): Result<Unit> {
         return try {
-            AppDatabase.closeDatabase()
+            // 1. 切换槽位标记并确保写入完成
             settingsManager.switchSlot()
+            
+            // 2. 彻底清理旧的数据库实例和 Repository 缓存
+            AppDatabase.closeDatabase()
+            JournalRepository.getInstance(context).refresh()
+            
+            // 3. 增加微小延迟，确保 DataStore 的 Flow 发射了新值，且旧连接已完全释放
+            kotlinx.coroutines.delay(200)
+
             Result.success(Unit)
         } catch (e: Exception) {
             Result.failure(e)

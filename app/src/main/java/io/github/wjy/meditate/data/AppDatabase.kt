@@ -13,6 +13,9 @@ import kotlinx.coroutines.sync.withLock
 @Database(entities = [JournalEntry::class], version = 2, exportSchema = false)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun journalDao(): JournalDao
+    
+    // 记录当前实例所属的数据库名称（槽位）
+    var databaseName: String = ""
 
     companion object {
         @Volatile
@@ -26,19 +29,30 @@ abstract class AppDatabase : RoomDatabase() {
         }
 
         suspend fun getDatabase(context: Context): AppDatabase {
+            val settingsManager = SettingsManager(context)
+            val currentSlot = settingsManager.activeSlot.first()
+            val expectedDbName = "paper_database_$currentSlot"
+
+            // 如果已有实例但名称不匹配，强制关闭并清理
+            val existingInstance = INSTANCE
+            if (existingInstance != null && existingInstance.databaseName != expectedDbName) {
+                mutex.withLock {
+                    if (INSTANCE?.databaseName != expectedDbName) {
+                        closeDatabase()
+                    }
+                }
+            }
+
             return INSTANCE ?: mutex.withLock {
                 INSTANCE ?: run {
-                    val settingsManager = SettingsManager(context)
-                    val slot = settingsManager.activeSlot.first()
-                    val dbName = "paper_database_$slot"
-                    
                     val instance = Room.databaseBuilder(
                         context.applicationContext,
                         AppDatabase::class.java,
-                        dbName
+                        expectedDbName
                     )
                         .addMigrations(MIGRATION_1_2)
                         .build()
+                    instance.databaseName = expectedDbName
                     INSTANCE = instance
                     instance
                 }

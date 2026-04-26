@@ -3,7 +3,9 @@ package io.github.wjy.meditate.data
 import android.annotation.SuppressLint
 import android.content.Context
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 
 data class BlurSettings(
     val enabled: Boolean,
@@ -18,9 +20,25 @@ class JournalRepository private constructor(context: Context) {
     
     val settingsManager = SettingsManager(appContext)
     private var _dao: JournalDao? = null
+    private val _refreshTrigger = MutableSharedFlow<Unit>(replay = 1).apply { tryEmit(Unit) }
 
     suspend fun getDao(): JournalDao {
         return _dao ?: AppDatabase.getDatabase(appContext).journalDao().also { _dao = it }
+    }
+
+    /**
+     * 提供一个响应式 DAO 流，当数据库切换时会自动发射新的 DAO
+     */
+    fun getDaoFlow(): Flow<JournalDao> = _refreshTrigger.map {
+        getDao()
+    }
+
+    /**
+     * 清除缓存的 DAO 实例，并触发所有监听 DAO 的流重新加载
+     */
+    fun refresh() {
+        _dao = null
+        _refreshTrigger.tryEmit(Unit)
     }
 
     /**
