@@ -6,7 +6,6 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
-import android.graphics.Bitmap
 import android.net.Uri
 import android.renderscript.Allocation
 import android.renderscript.Element
@@ -69,6 +68,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.content.FileProvider
+import androidx.core.graphics.scale
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -132,7 +132,7 @@ fun SettingsScreen(
                 val scale = 0.25f
                 val width = (original.width * scale).toInt().coerceAtLeast(1)
                 val height = (original.height * scale).toInt().coerceAtLeast(1)
-                val screenshot = Bitmap.createScaledBitmap(original, width, height, true)
+                val screenshot = original.scale(width, height)
                 original.recycle()
 
                 val rs = RenderScript.create(context)

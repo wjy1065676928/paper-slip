@@ -73,6 +73,7 @@ import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import androidx.core.graphics.scale
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -88,7 +89,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
 import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
@@ -174,7 +174,7 @@ fun HomeScreen(
             val scale = 0.25f
             val width = (original.width * scale).toInt().coerceAtLeast(1)
             val height = (original.height * scale).toInt().coerceAtLeast(1)
-            val screenshot = Bitmap.createScaledBitmap(original, width, height, true)
+            val screenshot = original.scale(width, height)
             original.recycle()
 
             val rs = RenderScript.create(context)

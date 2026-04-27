@@ -1,6 +1,7 @@
 package io.github.wjy.meditate.ui.home
 
 import android.app.Application
+import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import androidx.compose.runtime.Immutable

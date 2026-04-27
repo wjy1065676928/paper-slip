@@ -69,7 +69,6 @@ import io.github.wjy.meditate.ui.home.ShareDto
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.serialization.json.Json
 import zxingcpp.BarcodeReader
 import java.util.concurrent.Executors
 
