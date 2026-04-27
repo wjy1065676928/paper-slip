@@ -3,6 +3,7 @@ package io.github.wjy.meditate.ui.home
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import androidx.compose.runtime.Immutable
 import io.github.wjy.meditate.data.JournalEntry
 import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.data.SettingsManager
@@ -17,7 +18,10 @@ import kotlinx.coroutines.launch
 
 /**
  * 现代 MVI 架构：单一 UI 状态源
+ * 标注为 @Immutable 告诉 Compose 编译器该对象一旦创建就不会改变其属性，
+ * 从而在列表刷新时跳过不必要的重绘检查。
  */
+@Immutable
 data class HomeUiState(
     val entries: List<JournalEntry> = emptyList(),
     val deletedEntries: List<JournalEntry> = emptyList(),

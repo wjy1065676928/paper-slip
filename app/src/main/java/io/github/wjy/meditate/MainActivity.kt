@@ -45,6 +45,11 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         
+        // 🚀 性能优化：数据库预热。在 UI 渲染的同时，异步启动数据库初始化。
+        lifecycleScope.launch {
+            io.github.wjy.meditate.data.JournalRepository.getInstance(this@MainActivity).getDao()
+        }
+        
         handleIntent(intent)
 
         setContent {

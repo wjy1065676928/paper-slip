@@ -7,6 +7,7 @@ import android.renderscript.Allocation
 import android.renderscript.Element
 import android.renderscript.RenderScript
 import android.renderscript.ScriptIntrinsicBlur
+import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
@@ -55,6 +56,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -74,6 +76,7 @@ import androidx.compose.ui.zIndex
 import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.network.QrCodeUtils
 import io.github.wjy.meditate.ui.home.components.AddEntryOverlay
@@ -81,8 +84,11 @@ import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
 import io.github.wjy.meditate.ui.home.components.HomeTopBar
 import io.github.wjy.meditate.ui.home.components.JournalEntryItem
 import io.github.wjy.meditate.ui.home.components.TrashOverlay
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.encodeToString
 import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
@@ -116,6 +122,8 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     val focusManager = LocalFocusManager.current
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { JournalRepository.getInstance(context) }
 
     // 核心修复：处理物理返回键。
     // 如果处于选择模式、删除模式或有任何弹窗开启，拦截返回键并执行取消/关闭操作。
@@ -161,7 +169,14 @@ fun HomeScreen(
 
     LaunchedEffect(isOverlayVisible, uiState.blurIntensity) {
         if (isOverlayVisible && uiState.blurEnabled && uiState.blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
-            val screenshot = view.drawToBitmap()
+            val original = view.drawToBitmap()
+            // 🚀 性能优化：降采样。将截图缩小到 1/4，模糊计算量减少 16 倍，且视觉效果几乎无差。
+            val scale = 0.25f
+            val width = (original.width * scale).toInt().coerceAtLeast(1)
+            val height = (original.height * scale).toInt().coerceAtLeast(1)
+            val screenshot = Bitmap.createScaledBitmap(original, width, height, true)
+            original.recycle()
+
             val rs = RenderScript.create(context)
             val input = Allocation.createFromBitmap(rs, screenshot)
             val output = Allocation.createTyped(rs, input.type)
@@ -211,24 +226,33 @@ fun HomeScreen(
                     },
                     onShareSelected = {
                         val toShare = uiState.entries.filter { it.id in selectedIds }
-                        try {
-                            val dtoList = toShare.map { entry ->
-                                ShareDto(
-                                    c = entry.content,
-                                    t = entry.moodTag,
-                                    d = entry.timestamp,
-                                    a = entry.selfAdvice
-                                )
+                        scope.launch {
+                            try {
+                                val dtoList = toShare.map { entry ->
+                                    ShareDto(
+                                        c = entry.content,
+                                        t = entry.moodTag,
+                                        d = entry.timestamp,
+                                        a = entry.selfAdvice
+                                    )
+                                }
+                                // 🚀 性能优化：在后台线程进行 JSON 序列化和二维码生成，防止 UI 掉帧
+                                val jsonStr = withContext(Dispatchers.Default) {
+                                    repository.json.encodeToString(dtoList)
+                                }
+                                
+                                if (jsonStr.length > 2000) {
+                                    Toast.makeText(context, "选中内容过多，超过二维码传输上限", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    val bitmap = withContext(Dispatchers.Default) {
+                                        QrCodeUtils.generateQrCode(jsonStr, 800)
+                                    }
+                                    qrBitmap = bitmap
+                                }
+                            } catch (e: Exception) {
+                                Log.e("HomeShare", "Share failed", e)
+                                Toast.makeText(context, "分享失败：内容异常", Toast.LENGTH_SHORT).show()
                             }
-                            val json = Json.encodeToString(dtoList)
-                            
-                            if (json.length > 2000) {
-                                Toast.makeText(context, "选中内容过多，超过二维码传输上限", Toast.LENGTH_SHORT).show()
-                            } else {
-                                qrBitmap = QrCodeUtils.generateQrCode(json, 800)
-                            }
-                        } catch (_: Exception) {
-                            Toast.makeText(context, "分享失败：内容异常", Toast.LENGTH_SHORT).show()
                         }
                     }
                 )

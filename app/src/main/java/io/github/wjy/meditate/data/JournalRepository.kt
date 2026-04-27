@@ -6,6 +6,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.serialization.json.Json
 
 data class BlurSettings(
     val enabled: Boolean,
@@ -21,6 +22,13 @@ class JournalRepository private constructor(context: Context) {
     val settingsManager = SettingsManager(appContext)
     private var _dao: JournalDao? = null
     private val _refreshTrigger = MutableSharedFlow<Unit>(replay = 1).apply { tryEmit(Unit) }
+
+    // 🚀 性能优化：序列化单例。配置缓存解析器，开启 ignoreUnknownKeys 增强鲁棒性。
+    val json = Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        coerceInputValues = true
+    }
 
     suspend fun getDao(): JournalDao {
         return _dao ?: AppDatabase.getDatabase(appContext).journalDao().also { _dao = it }

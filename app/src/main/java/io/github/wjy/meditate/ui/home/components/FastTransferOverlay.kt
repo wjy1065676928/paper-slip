@@ -48,6 +48,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -63,7 +64,11 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.zIndex
 import androidx.core.content.ContextCompat
 import io.github.wjy.meditate.data.JournalEntry
+import io.github.wjy.meditate.data.JournalRepository
 import io.github.wjy.meditate.ui.home.ShareDto
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import zxingcpp.BarcodeReader
 import java.util.concurrent.Executors
@@ -97,6 +102,9 @@ fun FastTransferOverlay(
     }
 
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { JournalRepository.getInstance(context) }
+
     var hasCameraPermission by remember {
         mutableStateOf(
             ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -216,20 +224,25 @@ fun FastTransferOverlay(
                         ) {
                             if (isScanning && hasCameraPermission) {
                                 QrScannerView(onResult = { result ->
-                                    try {
-                                        val dtoList = Json.decodeFromString<List<ShareDto>>(result)
-                                        scannedEntries = dtoList.map { dto ->
-                                            JournalEntry(
-                                                content = dto.c,
-                                                moodTag = dto.t,
-                                                timestamp = dto.d,
-                                                selfAdvice = dto.a
-                                            )
+                                    scope.launch {
+                                        try {
+                                            // 🚀 性能优化：在后台线程解析 JSON，避免界面卡顿
+                                            val dtoList = withContext(Dispatchers.Default) {
+                                                repository.json.decodeFromString<List<ShareDto>>(result)
+                                            }
+                                            scannedEntries = dtoList.map { dto ->
+                                                JournalEntry(
+                                                    content = dto.c,
+                                                    moodTag = dto.t,
+                                                    timestamp = dto.d,
+                                                    selfAdvice = dto.a
+                                                )
+                                            }
+                                            // 扫描成功，不再扫描，转为显示预览
+                                            isScanning = false 
+                                        } catch (e: Exception) {
+                                            Log.e("FastTransfer", "Parse failed", e)
                                         }
-                                        // 扫描成功，不再扫描，转为显示预览
-                                        isScanning = false 
-                                    } catch (e: Exception) {
-                                        Log.e("FastTransfer", "Parse failed", e)
                                     }
                                 })
                             } else if (isScanning) {

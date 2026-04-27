@@ -1,9 +1,11 @@
 package io.github.wjy.meditate.data
 
+import androidx.compose.runtime.Stable
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 import kotlinx.serialization.Serializable
 
+@Stable
 @Serializable
 @Entity(tableName = "journal_entries")
 data class JournalEntry(

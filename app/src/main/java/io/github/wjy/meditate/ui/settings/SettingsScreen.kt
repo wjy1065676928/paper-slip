@@ -6,6 +6,7 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
+import android.graphics.Bitmap
 import android.net.Uri
 import android.renderscript.Allocation
 import android.renderscript.Element
@@ -126,8 +127,14 @@ fun SettingsScreen(
     LaunchedEffect(isOverlayVisible, blurIntensity) {
         if (isOverlayVisible && blurEnabled && blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
             try {
-                // 确保在截图前 UI 状态已更新，但动画尚未完全覆盖
-                val screenshot = view.drawToBitmap()
+                val original = view.drawToBitmap()
+                // 🚀 性能优化：降采样。将截图缩小到 1/4，模糊计算量减少 16 倍，大幅提升 A12- 模式响应速度。
+                val scale = 0.25f
+                val width = (original.width * scale).toInt().coerceAtLeast(1)
+                val height = (original.height * scale).toInt().coerceAtLeast(1)
+                val screenshot = Bitmap.createScaledBitmap(original, width, height, true)
+                original.recycle()
+
                 val rs = RenderScript.create(context)
                 val input = Allocation.createFromBitmap(rs, screenshot)
                 val output = Allocation.createTyped(rs, input.type)
