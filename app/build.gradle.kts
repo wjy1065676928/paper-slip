@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.androidx.baselineprofile)
 }
 
 android {
@@ -31,15 +32,16 @@ android {
     }
 
     val keystoreProperties = Properties().apply {
-        load(rootProject.file("local.properties").inputStream())
+        val f = rootProject.file("local.properties")
+        if (f.exists()) load(f.inputStream())
     }
 
     signingConfigs {
         create("release") {
-            storeFile = file(path)
-            storePassword = keystoreProperties.getProperty("KEYSTORE_PASSWORD")
-            keyAlias = keystoreProperties.getProperty("KEY_ALIAS")
-            keyPassword = keystoreProperties.getProperty("KEY_PASSWORD")
+            storeFile = file(keystoreProperties.getProperty("path") ?: "keystore.jks")
+            storePassword = keystoreProperties.getProperty("KEYSTORE_PASSWORD") ?: ""
+            keyAlias = keystoreProperties.getProperty("KEY_ALIAS") ?: ""
+            keyPassword = keystoreProperties.getProperty("KEY_PASSWORD") ?: ""
         }
     }
 
@@ -75,6 +77,22 @@ android {
         buildConfig = true
     }
 
+    // 🚀 Android App Bundle 配置
+    bundle {
+        language {
+            // 只打包中文语言资源
+            enableSplit = false
+        }
+        density {
+            // 不分 density 模块（因为我们只有通用资源）
+            enableSplit = false
+        }
+        abi {
+            // 根据 ABI 分拆（配合仅 arm64 配置，效果更好）
+            enableSplit = true
+        }
+    }
+
     packaging {
         resources {
             // 🚀 极致资源剔除
@@ -83,6 +101,7 @@ android {
                 "META-INF/*.properties",
                 "META-INF/*kotlin*",
                 "META-INF/*room*",
+                "META-INF/*coroutines*",
                 "META-INF/licenses/**",
                 "**/debug/*"
             )
@@ -109,7 +128,7 @@ dependencies {
     implementation(libs.androidx.material.icons.core)
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.navigation.compose)
-    
+
     implementation(libs.androidx.room.runtime)
     implementation(libs.androidx.room.ktx)
     ksp(libs.androidx.room.compiler)
@@ -125,7 +144,8 @@ dependencies {
 
     implementation(libs.ktor.client.android)
 
-    // 🚀 Baseline Profile（性能提升）
+    // 🚀 Baseline Profile（性能提升 — 需要设备执行生成任务）
+    baselineProfile(project(":baselineprofile"))
     implementation(libs.androidx.profileinstaller)
 
     debugImplementation(libs.androidx.ui.tooling)

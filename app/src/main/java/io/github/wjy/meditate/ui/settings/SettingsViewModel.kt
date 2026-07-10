@@ -5,7 +5,6 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import io.github.wjy.meditate.data.JournalEntry
 import io.github.wjy.meditate.data.JournalRepository
-import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.data.WebDavConfig
 import io.github.wjy.meditate.network.RestorePreview
 import io.github.wjy.meditate.network.SyncManager
@@ -29,9 +28,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     val blurEnabled = repository.settingsManager.blurEnabled
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = false)
 
-    val blurImplementation = repository.settingsManager.blurImplementation
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = SettingsManager.IMPL_HARDWARE)
-
     val blurIntensity = repository.settingsManager.blurIntensity
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), initialValue = 16f)
 
@@ -44,12 +40,6 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun setBlurEnabled(enabled: Boolean) {
         viewModelScope.launch {
             repository.settingsManager.setBlurEnabled(enabled)
-        }
-    }
-
-    fun setBlurImplementation(implementation: String) {
-        viewModelScope.launch {
-            repository.settingsManager.setBlurImplementation(implementation)
         }
     }
 

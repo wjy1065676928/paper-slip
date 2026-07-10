@@ -2,15 +2,16 @@ package io.github.wjy.meditate.data
 
 import android.annotation.SuppressLint
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.serialization.json.Json
 
+@Immutable
 data class BlurSettings(
     val enabled: Boolean,
-    val implementation: String,
     val intensity: Float
 )
 
@@ -54,10 +55,9 @@ class JournalRepository private constructor(context: Context) {
      */
     val blurSettings: Flow<BlurSettings> = combine(
         settingsManager.blurEnabled,
-        settingsManager.blurImplementation,
         settingsManager.blurIntensity
-    ) { enabled, impl, intensity ->
-        BlurSettings(enabled, impl, intensity)
+    ) { enabled, intensity ->
+        BlurSettings(enabled, intensity)
     }
 
     companion object {

@@ -4,10 +4,8 @@ import android.app.Application
 import androidx.compose.runtime.Immutable
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.compose.runtime.Immutable
 import io.github.wjy.meditate.data.JournalEntry
 import io.github.wjy.meditate.data.JournalRepository
-import io.github.wjy.meditate.data.SettingsManager
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -29,7 +27,6 @@ data class HomeUiState(
     val dbTags: List<String> = emptyList(),
     val sessionTags: Set<String> = emptySet(),
     val blurEnabled: Boolean = false,
-    val blurImplementation: String = SettingsManager.IMPL_HARDWARE,
     val blurIntensity: Float = 16f,
     val isLoading: Boolean = false
 )
@@ -72,7 +69,6 @@ class HomeViewModel(application: Application) : AndroidViewModel(application) {
                 dbTags = entries.map { it.moodTag }.distinct().filter { it.isNotBlank() },
                 sessionTags = sessionTags,
                 blurEnabled = blur.enabled,
-                blurImplementation = blur.implementation,
                 blurIntensity = blur.intensity,
                 isLoading = false
             )

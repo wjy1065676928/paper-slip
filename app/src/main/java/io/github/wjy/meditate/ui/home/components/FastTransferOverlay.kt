@@ -306,21 +306,18 @@ private fun QrScannerView(onResult: (String) -> Unit) {
     AndroidView(
         factory = { ctx ->
             PreviewView(ctx).apply {
-                // 核心修复：使用 COMPATIBLE (TextureView) 模式。
-                // 只有 TextureView 才能跟随 Compose 的图形变换（透明度、缩放），解决动画分层问题。
                 implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                 scaleType = PreviewView.ScaleType.FILL_CENTER
             }
         },
         modifier = Modifier
             .fillMaxSize()
-            // 明确应用图形层以确保 alpha 能够传递到底层 native View
             .graphicsLayer { clip = true },
         update = { previewView ->
             val cameraProviderFuture = ProcessCameraProvider.getInstance(context)
             cameraProviderFuture.addListener({
                 val cameraProvider = cameraProviderFuture.get()
-                
+
                 val preview = Preview.Builder().build().apply {
                     surfaceProvider = previewView.surfaceProvider
                 }
@@ -328,7 +325,7 @@ private fun QrScannerView(onResult: (String) -> Unit) {
                 val imageAnalysis = ImageAnalysis.Builder()
                     .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                     .build()
-                    .also { it ->
+                    .also {
                         it.setAnalyzer(cameraExecutor) { imageProxy ->
                             val results = imageProxy.use { reader.read(it) }
                             if (results.isNotEmpty()) {

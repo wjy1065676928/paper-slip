@@ -1,6 +1,7 @@
 package io.github.wjy.meditate.data
 
 import android.content.Context
+import androidx.compose.runtime.Immutable
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -11,6 +12,7 @@ import kotlinx.coroutines.flow.map
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
+@Immutable
 data class WebDavConfig(
     val url: String = "",
     val user: String = "",
@@ -21,25 +23,17 @@ data class WebDavConfig(
 class SettingsManager(private val context: Context) {
     companion object {
         private val BLUR_ENABLED = booleanPreferencesKey("blur_enabled")
-        private val BLUR_IMPLEMENTATION = stringPreferencesKey("blur_implementation")
         private val BLUR_INTENSITY = floatPreferencesKey("blur_intensity")
-        
+
         private val WEBDAV_URL = stringPreferencesKey("webdav_url")
         private val WEBDAV_USER = stringPreferencesKey("webdav_user")
         private val WEBDAV_PASS = stringPreferencesKey("webdav_pass")
         private val WEBDAV_IGNORE_CERT = booleanPreferencesKey("webdav_ignore_cert")
         private val ACTIVE_SLOT = stringPreferencesKey("active_slot")
-        
-        const val IMPL_HARDWARE = "A13+"
-        const val IMPL_RENDER_SCRIPT = "A12-"
     }
 
     val blurEnabled: Flow<Boolean> = context.dataStore.data.map { preferences ->
         preferences[BLUR_ENABLED] ?: false
-    }
-
-    val blurImplementation: Flow<String> = context.dataStore.data.map { preferences ->
-        preferences[BLUR_IMPLEMENTATION] ?: IMPL_HARDWARE
     }
 
     val blurIntensity: Flow<Float> = context.dataStore.data.map { preferences ->
@@ -62,12 +56,6 @@ class SettingsManager(private val context: Context) {
     suspend fun setBlurEnabled(enabled: Boolean) {
         context.dataStore.edit { preferences ->
             preferences[BLUR_ENABLED] = enabled
-        }
-    }
-
-    suspend fun setBlurImplementation(implementation: String) {
-        context.dataStore.edit { preferences ->
-            preferences[BLUR_IMPLEMENTATION] = implementation
         }
     }
 

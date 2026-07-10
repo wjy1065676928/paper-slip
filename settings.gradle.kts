@@ -24,4 +24,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "纸条"
 include(":app")
+include(":baselineprofile")
  

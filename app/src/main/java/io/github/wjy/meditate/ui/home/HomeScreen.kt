@@ -1,24 +1,15 @@
-@file:Suppress("DEPRECATION")
-
 package io.github.wjy.meditate.ui.home
 
 import android.graphics.Bitmap
-import android.renderscript.Allocation
-import android.renderscript.Element
-import android.renderscript.RenderScript
-import android.renderscript.ScriptIntrinsicBlur
 import android.util.Log
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -60,26 +51,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.ImageBitmap
-import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
-import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
-import androidx.core.graphics.scale
-import androidx.core.view.drawToBitmap
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.wjy.meditate.data.JournalRepository
-import io.github.wjy.meditate.data.SettingsManager
 import io.github.wjy.meditate.network.QrCodeUtils
+import io.github.wjy.meditate.ui.components.BlurBackground
 import io.github.wjy.meditate.ui.home.components.AddEntryOverlay
 import io.github.wjy.meditate.ui.home.components.FastTransferOverlay
 import io.github.wjy.meditate.ui.home.components.HomeTopBar
@@ -89,7 +72,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlin.time.Duration.Companion.milliseconds
 
 @Serializable
 data class ShareDto(
@@ -99,7 +81,6 @@ data class ShareDto(
     val a: String? // advice
 )
 
-@Suppress("DEPRECATION")
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun HomeScreen(
@@ -158,230 +139,143 @@ fun HomeScreen(
     }
 
     val isOverlayVisible = isAdding || isShowingTrash || qrBitmap != null
-    val view = LocalView.current
-    
-    var blurredBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
-    val blurAlpha by animateFloatAsState(
-        targetValue = if (isOverlayVisible && blurredBitmap != null) 1f else 0f,
-        animationSpec = tween(300),
-        label = "HomeBlurAlpha"
-    )
-
-    LaunchedEffect(isOverlayVisible, uiState.blurIntensity) {
-        if (isOverlayVisible && uiState.blurEnabled && uiState.blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT) {
-            val original = view.drawToBitmap()
-            // 🚀 性能优化：降采样。将截图缩小到 1/4，模糊计算量减少 16 倍，且视觉效果几乎无差。
-            val scale = 0.25f
-            val width = (original.width * scale).toInt().coerceAtLeast(1)
-            val height = (original.height * scale).toInt().coerceAtLeast(1)
-            val screenshot = original.scale(width, height)
-            original.recycle()
-
-            val rs = RenderScript.create(context)
-            val input = Allocation.createFromBitmap(rs, screenshot)
-            val output = Allocation.createTyped(rs, input.type)
-            val script = ScriptIntrinsicBlur.create(rs, Element.U8_4(rs))
-            script.setRadius(uiState.blurIntensity.coerceIn(1f, 25f))
-            script.setInput(input)
-            script.forEach(output)
-            output.copyTo(screenshot)
-            blurredBitmap = screenshot.asImageBitmap()
-            rs.destroy()
-        } else if (!isOverlayVisible) {
-            // 延迟清空，匹配淡出动画
-            kotlinx.coroutines.delay(300.milliseconds)
-            blurredBitmap = null
-        }
-    }
-    
-    val blurRadius by animateFloatAsState(
-        targetValue = if (isOverlayVisible && uiState.blurEnabled && 
-            (uiState.blurImplementation == SettingsManager.IMPL_HARDWARE || 
-             uiState.blurImplementation == SettingsManager.IMPL_RENDER_SCRIPT)) uiState.blurIntensity else 0f,
-        animationSpec = tween(300),
-        label = "BlurAnimation"
-    )
 
     Box(modifier = Modifier.fillMaxSize()) {
-        Scaffold(
-            modifier = Modifier.blur(blurRadius.dp),
-            topBar = {
-                HomeTopBar(
-                    isSelectionMode = isSelectionMode,
-                    selectedCount = selectedIds.size,
-                    totalVisibleCount = filteredEntries.size,
-                    onSettingsClick = onNavigateToSettings,
-                    onCancelSelection = { selectedIds = emptySet() },
-                    onToggleSelectAll = {
-                        selectedIds = if (selectedIds.size == filteredEntries.size) {
-                            emptySet()
-                        } else {
-                            filteredEntries.map { it.id }.toSet()
-                        }
-                    },
-                    onDeleteSelected = {
-                        val toDelete = uiState.entries.filter { it.id in selectedIds }
-                        viewModel.onAction(HomeAction.SoftDeleteEntries(toDelete))
-                        selectedIds = emptySet()
-                    },
-                    onShareSelected = {
-                        val toShare = uiState.entries.filter { it.id in selectedIds }
-                        scope.launch {
-                            try {
-                                val dtoList = toShare.map { entry ->
-                                    ShareDto(
-                                        c = entry.content,
-                                        t = entry.moodTag,
-                                        d = entry.timestamp,
-                                        a = entry.selfAdvice
-                                    )
-                                }
-                                // 🚀 性能优化：在后台线程进行 JSON 序列化和二维码生成，防止 UI 掉帧
-                                val jsonStr = withContext(Dispatchers.Default) {
-                                    repository.json.encodeToString(dtoList)
-                                }
-                                
-                                if (jsonStr.length > 2000) {
-                                    Toast.makeText(context, "选中内容过多，超过二维码传输上限", Toast.LENGTH_SHORT).show()
-                                } else {
-                                    val bitmap = withContext(Dispatchers.Default) {
-                                        QrCodeUtils.generateQrCode(jsonStr, 800)
-                                    }
-                                    qrBitmap = bitmap
-                                }
-                            } catch (e: Exception) {
-                                Log.e("HomeShare", "Share failed", e)
-                                Toast.makeText(context, "分享失败：内容异常", Toast.LENGTH_SHORT).show()
-                            }
-                        }
-                    }
+        BlurBackground(
+            isOverlayVisible = isOverlayVisible,
+            blurEnabled = uiState.blurEnabled,
+            blurIntensity = uiState.blurIntensity,
+            modifier = Modifier.fillMaxSize(),
+            overlay = {
+                TrashOverlay(
+                    visible = isShowingTrash,
+                    entries = uiState.deletedEntries,
+                    onClose = { isShowingTrash = false },
+                    onRestore = { viewModel.onAction(HomeAction.RestoreEntry(it)); isShowingTrash = false },
+                    onPermanentlyDelete = { viewModel.onAction(HomeAction.PermanentlyDeleteEntry(it)) },
+                    onEmptyTrash = { viewModel.onAction(HomeAction.EmptyTrash); isShowingTrash = false }
                 )
-            },
-            floatingActionButton = {
-                if (!isAdding && !isSelectionMode) {
-                    HomeActionButtons(
-                        showTrashFab = showTrashFab,
-                        onTrashClick = { 
-                            isShowingTrash = true
-                            showTrashFab = false
-                        },
-                        onAddClick = { 
-                            isAdding = true
-                            showTrashFab = false 
-                        },
-                        onAddLongClick = { showTrashFab = !showTrashFab }
-                    )
-                }
+
+                AddEntryOverlay(
+                    visible = isAdding,
+                    existingTags = remember(uiState.dbTags, uiState.sessionTags) { 
+                        (uiState.dbTags + uiState.sessionTags).distinct().filter { it.isNotBlank() } 
+                    },
+                    onDismiss = { isAdding = false },
+                    onSave = { content, tag, advice ->
+                        viewModel.onAction(HomeAction.AddEntry(content, tag, advice))
+                        isAdding = false
+                    },
+                    onTagSync = { viewModel.onAction(HomeAction.AddSessionTag(it)) }
+                )
+
+                FastTransferOverlay(
+                    visible = qrBitmap != null,
+                    qrBitmap = qrBitmap,
+                    canSwitchMode = false,
+                    onClose = { qrBitmap = null },
+                    onImport = { viewModel.onAction(HomeAction.ImportEntries(it)) }
+                )
             }
-        ) { padding ->
-            Column(
-                modifier = Modifier
-                    .padding(padding)
-                    .fillMaxSize()
-                    .pointerInput(Unit) {
-                        detectTapGestures(onTap = { 
-                            isDeleteMode = false 
-                            showTrashFab = false
+        ) {
+            Scaffold(
+                topBar = {
+                    HomeTopBar(
+                        isSelectionMode = isSelectionMode,
+                        selectedCount = selectedIds.size,
+                        totalVisibleCount = filteredEntries.size,
+                        onSettingsClick = onNavigateToSettings,
+                        onCancelSelection = { selectedIds = emptySet() },
+                        onToggleSelectAll = {
+                            selectedIds = if (selectedIds.size == filteredEntries.size) emptySet()
+                            else filteredEntries.map { it.id }.toSet()
+                        },
+                        onDeleteSelected = {
+                            val toDelete = uiState.entries.filter { it.id in selectedIds }
+                            viewModel.onAction(HomeAction.SoftDeleteEntries(toDelete))
                             selectedIds = emptySet()
-                            focusManager.clearFocus()
-                        })
-                    }
-            ) {
-                CategoryRow(
-                    categories = categories,
-                    selectedCategory = selectedFilter,
-                    isDeleteMode = isDeleteMode && !isSelectionMode,
-                    onCategorySelected = { 
-                        if (!isSelectionMode) {
-                            selectedFilter = it
-                            isDeleteMode = false
-                        }
-                    },
-                    onCategoryLongClick = { if (!isSelectionMode) isDeleteMode = true },
-                    onDeleteCategory = { tag ->
-                        viewModel.onAction(HomeAction.DeleteEntriesByTag(tag))
-                    }
-                )
-                
-                LazyColumn(
-                    state = listState,
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    items(
-                        items = filteredEntries,
-                        key = { it.id },
-                        contentType = { "journal_entry" }
-                    ) { entry ->
-                        JournalEntryItem(
-                            entry = entry,
-                            isScrolling = listState.isScrollInProgress,
-                            isSelected = entry.id in selectedIds,
-                            isSelectionMode = isSelectionMode,
-                            onDelete = { viewModel.onAction(HomeAction.SoftDeleteEntry(entry)) },
-                            onToggleSelection = {
-                                selectedIds = if (entry.id in selectedIds) {
-                                    selectedIds - entry.id
-                                } else {
-                                    selectedIds + entry.id
+                        },
+                        onShareSelected = {
+                            val toShare = uiState.entries.filter { it.id in selectedIds }
+                            scope.launch {
+                                try {
+                                    val dtoList = toShare.map { entry ->
+                                        ShareDto(entry.content, entry.moodTag, entry.timestamp, entry.selfAdvice)
+                                    }
+                                    val jsonStr = withContext(Dispatchers.Default) {
+                                        repository.json.encodeToString(dtoList)
+                                    }
+                                    if (jsonStr.length > 2000) {
+                                        Toast.makeText(context, "选中内容过多，超过二维码传输上限", Toast.LENGTH_SHORT).show()
+                                    } else {
+                                        val bitmap = withContext(Dispatchers.Default) {
+                                            QrCodeUtils.generateQrCode(jsonStr, 800)
+                                        }
+                                        qrBitmap = bitmap
+                                    }
+                                } catch (e: Exception) {
+                                    Log.e("HomeShare", "Share failed", e)
+                                    Toast.makeText(context, "分享失败：内容异常", Toast.LENGTH_SHORT).show()
                                 }
                             }
+                        }
+                    )
+                },
+                floatingActionButton = {
+                    if (!isAdding && !isSelectionMode) {
+                        HomeActionButtons(
+                            showTrashFab = showTrashFab,
+                            onTrashClick = { isShowingTrash = true; showTrashFab = false },
+                            onAddClick = { isAdding = true; showTrashFab = false },
+                            onAddLongClick = { showTrashFab = !showTrashFab }
                         )
                     }
                 }
-            }
-        }
-
-        // RenderScript Legacy 模糊层
-        if (blurAlpha > 0f) {
-            blurredBitmap?.let { bitmap ->
-                Image(
-                    bitmap = bitmap,
-                    contentDescription = null,
+            ) { padding ->
+                Column(
                     modifier = Modifier
+                        .padding(padding)
                         .fillMaxSize()
-                        .graphicsLayer { alpha = blurAlpha }
-                        .zIndex(85f),
-                    contentScale = ContentScale.FillBounds
-                )
+                        .pointerInput(Unit) {
+                            detectTapGestures(onTap = { 
+                                isDeleteMode = false; showTrashFab = false
+                                selectedIds = emptySet(); focusManager.clearFocus()
+                            })
+                        }
+                ) {
+                    CategoryRow(
+                        categories = categories,
+                        selectedCategory = selectedFilter,
+                        isDeleteMode = isDeleteMode && !isSelectionMode,
+                        onCategorySelected = { 
+                            if (!isSelectionMode) { selectedFilter = it; isDeleteMode = false }
+                        },
+                        onCategoryLongClick = { if (!isSelectionMode) isDeleteMode = true },
+                        onDeleteCategory = { tag -> viewModel.onAction(HomeAction.DeleteEntriesByTag(tag)) }
+                    )
+
+                    LazyColumn(
+                        state = listState,
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(bottom = 80.dp, start = 16.dp, end = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(items = filteredEntries, key = { it.id }, contentType = { "journal_entry" }) { entry ->
+                            JournalEntryItem(
+                                entry = entry,
+                                isScrolling = listState.isScrollInProgress,
+                                isSelected = entry.id in selectedIds,
+                                isSelectionMode = isSelectionMode,
+                                onDelete = { viewModel.onAction(HomeAction.SoftDeleteEntry(entry)) },
+                                onToggleSelection = {
+                                    selectedIds = if (entry.id in selectedIds) selectedIds - entry.id
+                                    else selectedIds + entry.id
+                                }
+                            )
+                        }
+                    }
+                }
             }
-        }
-
-        Box(modifier = Modifier.zIndex(100f)) {
-            TrashOverlay(
-                visible = isShowingTrash,
-                entries = uiState.deletedEntries,
-                onClose = { isShowingTrash = false },
-                onRestore = { viewModel.onAction(HomeAction.RestoreEntry(it)); isShowingTrash = false },
-                onPermanentlyDelete = { viewModel.onAction(HomeAction.PermanentlyDeleteEntry(it)) },
-                onEmptyTrash = { viewModel.onAction(HomeAction.EmptyTrash); isShowingTrash = false }
-            )
-        }
-        
-        Box(modifier = Modifier.zIndex(110f)) {
-            AddEntryOverlay(
-                visible = isAdding,
-                existingTags = remember(uiState.dbTags, uiState.sessionTags) { 
-                    (uiState.dbTags + uiState.sessionTags).distinct().filter { it.isNotBlank() } 
-                },
-                onDismiss = { isAdding = false },
-                onSave = { content, tag, advice ->
-                    viewModel.onAction(HomeAction.AddEntry(content, tag, advice))
-                    isAdding = false
-                },
-                onTagSync = { viewModel.onAction(HomeAction.AddSessionTag(it)) }
-            )
-        }
-
-        Box(modifier = Modifier.zIndex(120f)) {
-            FastTransferOverlay(
-                visible = qrBitmap != null,
-                qrBitmap = qrBitmap,
-                canSwitchMode = false, // 主界面仅用于展示码，不提供扫码切换
-                onClose = { qrBitmap = null },
-                onImport = { viewModel.onAction(HomeAction.ImportEntries(it)) }
-            )
         }
     }
 }
